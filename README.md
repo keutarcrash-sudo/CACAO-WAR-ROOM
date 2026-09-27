@@ -6,7 +6,10 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 
 ## État du projet
 
-**Étape 0 — Document technique** : voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+**Étape 0 — Cadrage**
+- Document technique : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Système de design : [`docs/DESIGN.md`](docs/DESIGN.md)
+- Maquette interactive (valeurs fictives) : [`prototype/war-room.html`](prototype/war-room.html)
 
 Le développement (Phase 1 — Foundation) commence après validation de ce document
 et réponses aux questions de la section 18.

@@ -93,7 +93,9 @@ Légende utilisée dans tout le document :
 | Frontend | **React 18 + Vite + JavaScript** (pas de TypeScript, comme demandé) | Simple, rapide, standard |
 | Routage pages | `react-router-dom` | Quelques pages seulement |
 | Graphiques | **`lightweight-charts`** (TradingView, open source, ~45 Ko) | Fait pour les bougies + lignes de niveaux (liquidité, pivots, FVG). Léger. |
-| Style | **CSS simple avec variables** (pas de framework UI) | Style terminal sombre, léger, zéro dépendance |
+| Style | **CSS simple avec variables** (pas de framework UI) | Style terminal sombre, léger, zéro dépendance. Détail dans `docs/DESIGN.md` |
+| Animations | **CSS + View Transitions API + canvas**, aucune librairie d'animation | Fluide sur mobile, poids minimal |
+| Polices | Geist + Geist Mono via `@fontsource` (servies par le site) | Pas d'appel à un service tiers |
 | Backend | **Fonctions serveur Vercel** dans `/api` (Node.js 20+) | Même dépôt que le frontend, déploiement en 1 clic |
 | Base de données | **Supabase** (PostgreSQL) via `@supabase/supabase-js` côté serveur uniquement | Gratuit, SQL, interface web pour regarder les tables |
 | Horloge (cron) | **Supabase `pg_cron` + `pg_net`** qui appellent nos routes `/api/cron/*` | Gratuit et à la minute (Vercel gratuit = 1 cron/jour max) |
