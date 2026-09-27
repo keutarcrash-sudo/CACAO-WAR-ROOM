@@ -32,8 +32,10 @@ Les événements sont calculés quand l'app est ouverte. La surveillance en cont
 ### 1. Supabase (la base de données)
 1. Va sur **https://supabase.com**, crée un compte, puis **New project**.
 2. Choisis un nom (ex. `cocoa-war-room`), une région proche (ex. *West EU (Paris)*), et **note le mot de passe de la base**.
-3. Une fois le projet prêt, clique **Connect** en haut de la page, section **Transaction pooler**.
-4. Copie l'adresse. Remplace `[YOUR-PASSWORD]` par le mot de passe noté à l'étape 2. C'est ta `DATABASE_URL`.
+3. Une fois le projet prêt, clique **Connect** en haut de la page, onglet **Connection String**. Dans le menu **Method**, choisis **Transaction pooler** (à défaut **Session pooler**).
+4. Copie l'adresse. Elle doit contenir **`pooler.supabase.com`**. Remplace `[YOUR-PASSWORD]` par le mot de passe noté à l'étape 2. C'est ta `DATABASE_URL`.
+
+   N'utilise pas l'adresse **Direct connection** (`db.xxxx.supabase.co`) : Vercel ne peut pas la joindre.
 
 Aucune table à créer : l'app le fait toute seule au premier lancement.
 
