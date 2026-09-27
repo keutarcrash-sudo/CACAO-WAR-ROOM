@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Num } from '../components/Num.jsx';
 import { Freshness } from '../components/Freshness.jsx';
-import { useStored } from '../hooks/useStored.js';
+import { usePolling } from '../hooks/usePolling.js';
+import { api } from '../lib/api.js';
 import { eur, money, num, pct, dateShort, hhmm } from '../lib/format.js';
-import { exportAll, importAll } from '../lib/store.js';
 import { checkEntry } from '../../lib/engines/trade.js';
 
 const parse = s => {
@@ -12,188 +12,173 @@ const parse = s => {
   return Number.isFinite(v) ? v : null;
 };
 const today = () => new Date().toISOString().slice(0, 10);
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-const STATUS_COLOR = {
-  'NO POSITION': 'var(--none)', 'ENTRY 1': 'var(--data)', 'ENTRY 2': 'var(--data)', 'ENTRY 3': 'var(--data)',
-  'FULL POSITION': 'var(--data)', LOSS: 'var(--risk)', 'THESIS INVALIDATED': 'var(--risk)', CLOSED: 'var(--none)',
-};
-
-export function Trade({ trade, setTrade, position, tradePrice, eurPerUnit, market, fx }) {
-  const cur = trade.product.priceCurrency;
-  const [journal, setJournal] = useStored('journal', []);
-  const set = patch => setTrade(t => ({ ...t, ...patch }));
-
-  return (
-    <>
-      <section className="hero hero-compact">
-        <div>
-          <div className="label">{trade.product.direction === 'SHORT' ? 'Short' : 'Long'} cacao · {trade.product.kind === 'cfd' ? 'CFD / produit à levier' : 'Produit sans levier'}</div>
-          <div className="price price-md"><span className="num">€{num(position.capital)}</span><span className="faint thin"> / €{trade.plan.plannedCapital}</span></div>
-          <Alloc plan={trade.plan} entries={trade.entries} />
-          <div className="chg-row" style={{ marginTop: 12 }}>
-            <span className="chip" style={{ color: STATUS_COLOR[position.status] || 'var(--ink-2)' }}>{position.status}</span>
-            <span className="fresh">Budget restant €{num(position.remaining)}</span>
-          </div>
-        </div>
-      </section>
-
-      <div className="kv">
-        <div><span className="label">Prix moyen</span><b className="num">{money(position.avg, cur, 1)}</b><small>moyenne pondérée par la quantité</small></div>
-        <div><span className="label">Prix actuel</span><b>{tradePrice != null ? <Num value={tradePrice} format={x => money(x, cur, 1)} /> : '—'}</b>
-          <small>{trade.priceSource === 'manual' ? (trade.manualPrice ? `saisi à ${hhmm(trade.manualPrice.at)}` : 'à saisir') : <Freshness market={market} />}</small></div>
-        <div><span className="label">P&amp;L</span><b className={position.pnl > 0 ? 'up' : position.pnl < 0 ? 'down' : ''}>{position.pnl != null ? <Num value={position.pnl} format={x => eur(x, 2, true)} /> : '—'}</b>
-          <small>{position.roi != null ? `ROI ${pct(position.roi)}` : eurPerUnit == null && position.entriesCount ? 'taux de change indisponible' : '—'}{position.rMultiple != null ? ` · ${position.rMultiple >= 0 ? '+' : ''}${num(position.rMultiple, 2)} R` : ''}</small></div>
-        <div><span className="label">Exposition</span><b className="num">{eur(position.exposure)}</b><small>{num(position.qty, 3)} unités × prix</small></div>
-      </div>
-
-      <div className="glass card" style={{ marginTop: 14 }}>
-        <div className="row-between"><span className="label">Perte si le stop est touché</span><span className="mono num">{position.lossAtStop != null ? `${eur(position.lossAtStop)} / €${trade.plan.maxLoss}` : '—'}</span></div>
-        <div className="risk-meter"><i style={{ width: `${Math.min(100, Math.max(0, (position.lossAtStop || 0) / trade.plan.maxLoss * 100))}%` }} /></div>
-        <div className="status-grid">
-          <div><span className="label">Technique</span><b className={flagClass(position.flags.technical)}>{position.flags.technical}</b></div>
-          <div><span className="label">Risque</span><b className={flagClass(position.flags.risk)}>{position.flags.risk}</b></div>
-          <div><span className="label">Stop</span><b className={position.flags.stopDefined ? 'up' : 'down'}>{position.flags.stopDefined ? `${num(position.distToStopPct, 1)} %` : 'AUCUN'}</b></div>
-        </div>
-      </div>
-
-      <Levels trade={trade} set={set} position={position} cur={cur} />
-      <Entries trade={trade} setTrade={setTrade} position={position} eurPerUnit={eurPerUnit} tradePrice={tradePrice} journal={journal} setJournal={setJournal} />
-      <Journal journal={journal} setJournal={setJournal} snapshot={() => ({ at: Date.now(), price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg })} />
-      <Settings trade={trade} set={set} fx={fx} />
-      <DataTools setTrade={setTrade} trade={trade} />
-      <p className="foot">Données stockées sur cet appareil uniquement (v0.1). L’app ne passe aucun ordre.</p>
-    </>
-  );
-}
-
+const SYM = { USD: '$', GBP: '£', EUR: '€' };
 const flagClass = f => (f === 'VALID' || f === 'OK' ? 'up' : f === 'WARNING' ? 'warn' : 'down');
 
-function Alloc({ plan, entries }) {
+// Runs a server action and exposes its pending state and error message.
+function useAction(mutate) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async (action, payload) => {
+    setBusy(true); setError('');
+    try { return await mutate(action, payload); } catch (e) { setError(e.message); throw e; } finally { setBusy(false); }
+  };
+  return { run, busy, error, setError };
+}
+
+export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, fx, pulse }) {
+  const cur = trade.product.priceCurrency;
   return (
     <>
-      <div className="alloc" aria-hidden="true" style={{ gridTemplateColumns: plan.split.map(s => `${s}fr`).join(' ') }}>
-        {plan.split.map((_, i) => <i key={i} className={entries[i] ? 'on' : ''} />)}
-      </div>
-      <div className="alloc-lab" style={{ gridTemplateColumns: plan.split.map(s => `${s}fr`).join(' ') }}>
-        {plan.split.map((s, i) => <span key={i}>E{i + 1} · €{s}{entries[i] ? ' ✓' : ''}</span>)}
-      </div>
+      <section className="glass surface-3 position-card trade-hero">
+        <p className="eyebrow">{trade.product.direction === 'SHORT' ? 'Short' : 'Long'} cacao · {trade.product.kind === 'cfd' ? 'CFD / levier' : 'sans levier'}</p>
+        <div className="pos-top">
+          <span className="pos-cap num">€{num(position.capital)}<span className="faint"> / €{trade.plan.plannedCapital}</span></span>
+          <span className={`pos-pnl num ${position.pnl > 0 ? 'up' : position.pnl < 0 ? 'down' : 'faint'}`}>{position.pnl != null ? <Num value={position.pnl} format={x => eur(x, 2, true)} /> : '—'}</span>
+        </div>
+        <div className="alloc" style={{ gridTemplateColumns: trade.plan.split.map(s => `${s}fr`).join(' ') }} aria-hidden="true">
+          {trade.plan.split.map((_, i) => <i key={i} className={trade.entries[i] ? 'on' : ''} />)}
+        </div>
+        <div className="alloc-lab" style={{ gridTemplateColumns: trade.plan.split.map(s => `${s}fr`).join(' ') }}>
+          {trade.plan.split.map((s, i) => <span key={i}>E{i + 1} · €{s}{trade.entries[i] ? ' ✓' : ''}</span>)}
+        </div>
+        <span className="state-chip">{position.status}</span>
+      </section>
+
+      <ul className="rows figures">
+        <li><span className="row-main">Prix moyen<small>pondéré par la quantité</small></span><span className="row-side num big">{money(position.avg, cur, 1)}</span></li>
+        <li><span className="row-main">Prix actuel<small>{trade.priceSource === 'manual' ? (trade.manualPrice ? `saisi à ${hhmm(trade.manualPrice.at)}` : 'à saisir dans Produit et plan') : <Freshness market={market} />}</small></span>
+          <span className="row-side num big">{tradePrice != null ? <Num value={tradePrice} format={x => money(x, cur, 1)} /> : '—'}</span></li>
+        <li><span className="row-main">Rendement<small>{position.roi != null ? `ROI ${pct(position.roi)}` : eurPerUnit == null && position.entriesCount ? 'taux de change indisponible' : '—'}</small></span>
+          <span className="row-side num big">{position.rMultiple != null ? `${position.rMultiple >= 0 ? '+' : ''}${num(position.rMultiple, 2)} R` : '—'}</span></li>
+        <li><span className="row-main">Exposition<small>{num(position.qty, 3)} unités × prix</small></span><span className="row-side num big">{eur(position.exposure)}</span></li>
+      </ul>
+
+      <section className="glass surface-2 risk">
+        <div className="risk-top"><span>Perte si le stop est touché</span><b className="num">{position.lossAtStop != null ? `${eur(position.lossAtStop)} / €${trade.plan.maxLoss}` : '—'}</b></div>
+        <div className="gauge"><i style={{ width: `${Math.min(100, Math.max(0, (position.lossAtStop || 0) / trade.plan.maxLoss * 100))}%` }} /></div>
+        <dl className="facts facts-3">
+          <div><dt>Technique</dt><dd className={flagClass(position.flags.technical)}>{position.flags.technical}</dd></div>
+          <div><dt>Risque</dt><dd className={flagClass(position.flags.risk)}>{position.flags.risk}</dd></div>
+          <div><dt>Distance au stop</dt><dd className={position.flags.stopDefined ? '' : 'down'}>{position.flags.stopDefined ? (position.distToStopPct != null ? `${num(position.distToStopPct, 1)} %` : 'défini') : 'aucun stop'}</dd></div>
+        </dl>
+      </section>
+
+      <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
+      <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} />
+      <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
+      <Settings trade={trade} mutate={mutate} fx={fx} />
+      <DataTools trade={trade} mutate={mutate} />
+      <p className="foot">Données enregistrées dans ta base Supabase. L’app ne passe aucun ordre.</p>
     </>
   );
 }
 
-function Field({ id, label, value, onChange, placeholder, suffix, type = 'text', inputMode = 'decimal' }) {
+function Field({ id, label, value, onChange, placeholder, suffix, type = 'text' }) {
   return (
     <label className="field" htmlFor={id}>
-      <span className="label">{label}</span>
+      <span className="field-label">{label}</span>
       <span className="field-in">
-        <input id={id} type={type} inputMode={type === 'text' ? inputMode : undefined} value={value ?? ''} placeholder={placeholder} onChange={e => onChange(e.target.value)} />
+        <input id={id} type={type} inputMode={type === 'text' ? 'decimal' : undefined} value={value ?? ''} placeholder={placeholder} onChange={e => onChange(e.target.value)} />
         {suffix && <span className="suffix">{suffix}</span>}
       </span>
     </label>
   );
 }
 
-function Levels({ trade, set, position, cur }) {
+function Levels({ trade, mutate, position, cur }) {
   const [stop, setStop] = useState(trade.stop ?? '');
   const [tps, setTps] = useState([trade.targets[0] ?? '', trade.targets[1] ?? '']);
-  const sym = { USD: '$', GBP: '£', EUR: '€' }[cur];
+  const act = useAction(mutate);
   const dirty = parse(stop) !== trade.stop || tps.map(parse).filter(x => x != null).join() !== trade.targets.join();
-  const widened = trade.stop != null && parse(stop) != null && (trade.product.direction === 'SHORT' ? parse(stop) > trade.stop : parse(stop) < trade.stop) && position.entriesCount > 0;
-  const saveLevels = () => {
-    const s = parse(stop);
-    const history = [...(trade.stopHistory || [])];
-    if (s !== trade.stop) history.push({ at: Date.now(), from: trade.stop, to: s });
-    set({ stop: s, targets: tps.map(parse).filter(x => x != null), stopHistory: history });
-  };
+  const s = parse(stop);
+  const widened = trade.stop != null && s != null && position.entriesCount > 0 && (trade.product.direction === 'SHORT' ? s > trade.stop : s < trade.stop);
   return (
-    <>
-      <div className="section-head"><h2>Invalidation et objectifs</h2><span className="label">{sym} par tonne</span></div>
-      <div className="glass card">
-        <div className="form-grid">
-          <Field id="stop" label="Stop / invalidation" value={stop} onChange={setStop} placeholder="ex. 6900" suffix={sym} />
-          <Field id="tp1" label="Objectif 1" value={tps[0]} onChange={v => setTps([v, tps[1]])} placeholder="optionnel" suffix={sym} />
-          <Field id="tp2" label="Objectif 2" value={tps[1]} onChange={v => setTps([tps[0], v])} placeholder="optionnel" suffix={sym} />
-        </div>
-        {widened && <p className="msg warn">Tu éloignes le stop d’une position ouverte. C’est souvent le début d’une martingale : le risque augmente sans nouvelle confirmation.</p>}
-        {position.targets?.length > 0 && (
-          <ul className="cl">
-            {position.targets.map((t, i) => (
-              <li key={i}><span className="mk-ok">◎</span><span>TP{i + 1} · {money(t.price, cur)}<small className="cl-sub">distance {pct(t.distPct, 1)}</small></span><span className="pts">{eur(t.rewardEur, 2, true)}{t.rr != null ? ` · ${num(t.rr, 1)}R` : ''}</span></li>
-            ))}
-          </ul>
-        )}
-        <button className="btn block" disabled={!dirty} onClick={saveLevels} style={{ marginTop: 12 }}>Enregistrer les niveaux</button>
+    <section>
+      <header className="section-head"><h2>Invalidation et objectifs</h2><span className="meta">{SYM[cur]} par tonne</span></header>
+      <div className="form-grid">
+        <Field id="stop" label="Stop / invalidation" value={stop} onChange={setStop} placeholder="ex. 6900" suffix={SYM[cur]} />
+        <Field id="tp1" label="Objectif 1" value={tps[0]} onChange={v => setTps([v, tps[1]])} placeholder="optionnel" suffix={SYM[cur]} />
+        <Field id="tp2" label="Objectif 2" value={tps[1]} onChange={v => setTps([tps[0], v])} placeholder="optionnel" suffix={SYM[cur]} />
       </div>
-    </>
+      {widened && <p className="msg warn">Tu éloignes le stop d’une position ouverte. C’est souvent le début d’une martingale : le risque augmente sans nouvelle confirmation.</p>}
+      {position.targets?.length > 0 && (
+        <ul className="rows">
+          {position.targets.map((t, i) => (
+            <li key={i}><span className="row-main">Objectif {i + 1} · {money(t.price, cur)}<small>distance {pct(t.distPct, 1)}</small></span><span className="row-side num">{eur(t.rewardEur, 2, true)}{t.rr != null ? ` · ${num(t.rr, 1)} R` : ''}</span></li>
+          ))}
+        </ul>
+      )}
+      {act.error && <p className="msg bad">{act.error}</p>}
+      <button className="btn block" disabled={!dirty || act.busy} onClick={() => act.run('levels', { stop: parse(stop), targets: tps.map(parse) }).catch(() => {})}>{act.busy ? 'Enregistrement…' : 'Enregistrer les niveaux'}</button>
+    </section>
   );
 }
 
-function Entries({ trade, setTrade, position, eurPerUnit, tradePrice, journal, setJournal }) {
+function Entries({ trade, mutate, eurPerUnit, cur }) {
   const n = trade.entries.length + 1;
   const planned = trade.plan.split[n - 1];
   const [form, setForm] = useState({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() });
   const [override, setOverride] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
+  const act = useAction(mutate);
   const cand = { price: parse(form.price), qty: parse(form.qty), capitalEur: parse(form.capitalEur) ?? planned ?? 0, feesEur: parse(form.feesEur) ?? 0 };
   const filled = cand.price != null && cand.qty != null;
-  const check = useMemo(() => filled ? checkEntry({ entries: trade.entries, plan: trade.plan, product: trade.product, stop: trade.stop, eurPerUnit }, cand) : null,
+  // live feedback, the server applies the same rules again when saving
+  const check = useMemo(() => (filled ? checkEntry({ entries: trade.entries, plan: trade.plan, product: trade.product, stop: trade.stop, eurPerUnit }, cand) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filled, form, trade, eurPerUnit]);
-  const cur = trade.product.priceCurrency;
 
-  const add = () => {
-    const offRules = !check.ok;
-    const entry = { id: uid(), n, ...cand, date: form.date, offRules };
-    setTrade(t => ({ ...t, entries: [...t.entries, entry], closed: false }));
-    if (offRules) setJournal(j => [{ id: uid(), at: Date.now(), auto: true, text: `Entrée ${n} enregistrée hors règles : ${check.errors.join(' ')}`, snap: { price: tradePrice, status: position.status } }, ...j]);
-    setForm({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() });
-    setOverride(false);
+  const add = async () => {
+    try {
+      await act.run('addEntry', { ...cand, date: form.date, override: check && !check.ok ? override : false });
+      setForm({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() }); setOverride(false);
+    } catch { /* shown by useAction */ }
   };
-  const del = id => { setTrade(t => ({ ...t, entries: t.entries.filter(e => e.id !== id).map((e, i) => ({ ...e, n: i + 1 })) })); setConfirmDel(null); };
 
   return (
-    <>
-      <div className="section-head"><h2>Entrées</h2><span className="label">Jamais en martingale</span></div>
-      <div className="glass card">
+    <section>
+      <header className="section-head"><h2>Entrées</h2><span className="meta">jamais en martingale</span></header>
+      <ul className="rows">
         {trade.entries.map(e => (
-          <div className="entry done" key={e.id}>
-            <div className="entry-n">E{e.n}</div>
-            <div>{money(e.price, cur, 1)} · {num(e.qty, 3)} u.<small>{dateShort(Date.parse(e.date))} · €{num(e.capitalEur)}{e.feesEur ? ` · frais €${num(e.feesEur, 2)}` : ''}{e.offRules ? ' · hors règles' : ''}</small></div>
+          <li key={e.id}>
+            <span className="entry-n">E{e.n}</span>
+            <span className="row-main num">{money(e.price, cur, 1)} · {num(e.qty, 3)} u.<small>{dateShort(Date.parse(e.date))} · €{num(e.capitalEur)}{e.feesEur ? ` · frais €${num(e.feesEur, 2)}` : ''}{e.offRules ? ' · hors règles' : ''}</small></span>
             {confirmDel === e.id
-              ? <span className="row-actions"><button className="link down" onClick={() => del(e.id)}>Supprimer</button><button className="link" onClick={() => setConfirmDel(null)}>Annuler</button></span>
-              : <button className="link faint" onClick={() => setConfirmDel(e.id)} aria-label={`Supprimer l’entrée ${e.n}`}>Retirer</button>}
-          </div>
+              ? <span className="row-actions"><button className="link down" onClick={() => act.run('deleteEntry', { id: e.id }).catch(() => {}).finally(() => setConfirmDel(null))}>Supprimer</button><button className="link" onClick={() => setConfirmDel(null)}>Annuler</button></span>
+              : <button className="link faint" onClick={() => setConfirmDel(e.id)} aria-label={`Retirer l’entrée ${e.n}`}>Retirer</button>}
+          </li>
         ))}
-        {n <= 3 ? (
-          <div className="add-entry">
-            <div className="label" style={{ marginBottom: 10 }}>Enregistrer l’entrée {n} · plan €{planned}</div>
-            <div className="form-grid">
-              <Field id="e-price" label="Prix d’exécution" value={form.price} onChange={v => setForm({ ...form, price: v })} suffix={{ USD: '$', GBP: '£', EUR: '€' }[cur]} />
-              <Field id="e-qty" label="Quantité" value={form.qty} onChange={v => setForm({ ...form, qty: v })} placeholder="ex. 0,04" suffix="u." />
-              <Field id="e-cap" label="Capital engagé" value={form.capitalEur} onChange={v => setForm({ ...form, capitalEur: v })} placeholder={String(planned)} suffix="€" />
-              <Field id="e-fees" label="Frais" value={form.feesEur} onChange={v => setForm({ ...form, feesEur: v })} placeholder="0" suffix="€" />
-              <Field id="e-date" label="Date" type="date" value={form.date} onChange={v => setForm({ ...form, date: v })} />
-            </div>
-            {check && (
-              <div className="checks-box">
-                {check.errors.map(t => <p key={t} className="msg bad">✕ {t}</p>)}
-                {check.warnings.map(t => <p key={t} className="msg warn">! {t}</p>)}
-                {check.notes.map(t => <p key={t} className="msg note">○ {t}</p>)}
-                {check.ok && !check.warnings.length && <p className="msg ok">✓ Conforme aux règles de risque.</p>}
-              </div>
-            )}
-            {check && !check.ok && (
-              <label className="override" htmlFor="override">
-                <input id="override" type="checkbox" checked={override} onChange={e => setOverride(e.target.checked)} />
-                <span>Je l’ai quand même passée chez mon courtier. L’entrée sera marquée « hors règles » dans le journal.</span>
-              </label>
-            )}
-            <button className="btn primary block" disabled={!filled || (!check?.ok && !override)} onClick={add}>Enregistrer l’entrée {n}</button>
+      </ul>
+      {trade.closed ? <p className="empty">Position clôturée. Ouvre une nouvelle position dans « Données ».</p> : n <= 3 ? (
+        <div className="glass surface-2 add-entry">
+          <p className="eyebrow">Enregistrer l’entrée {n} · plan €{planned}</p>
+          <div className="form-grid">
+            <Field id="e-price" label="Prix d’exécution" value={form.price} onChange={v => setForm({ ...form, price: v })} suffix={SYM[cur]} />
+            <Field id="e-qty" label="Quantité" value={form.qty} onChange={v => setForm({ ...form, qty: v })} placeholder="ex. 0,04" suffix="u." />
+            <Field id="e-cap" label="Capital engagé" value={form.capitalEur} onChange={v => setForm({ ...form, capitalEur: v })} placeholder={String(planned)} suffix="€" />
+            <Field id="e-fees" label="Frais" value={form.feesEur} onChange={v => setForm({ ...form, feesEur: v })} placeholder="0" suffix="€" />
+            <Field id="e-date" label="Date" type="date" value={form.date} onChange={v => setForm({ ...form, date: v })} />
           </div>
-        ) : <p className="empty">Les trois entrées sont utilisées.</p>}
-      </div>
-    </>
+          {check && (
+            <div className="checks-box">
+              {check.errors.map(t => <p key={t} className="msg bad">✕ {t}</p>)}
+              {check.warnings.map(t => <p key={t} className="msg warn">! {t}</p>)}
+              {check.notes.map(t => <p key={t} className="msg note">○ {t}</p>)}
+              {check.ok && !check.warnings.length && <p className="msg ok">✓ Conforme aux règles de risque.</p>}
+            </div>
+          )}
+          {check && !check.ok && (
+            <label className="override" htmlFor="override">
+              <input id="override" type="checkbox" checked={override} onChange={e => setOverride(e.target.checked)} />
+              <span>Je l’ai quand même passée chez mon courtier. L’entrée sera marquée « hors règles » et notée au journal.</span>
+            </label>
+          )}
+          {act.error && <p className="msg bad">{act.error}</p>}
+          <button className="btn primary block" disabled={!filled || act.busy || (check && !check.ok && !override)} onClick={add}>{act.busy ? 'Enregistrement…' : `Enregistrer l’entrée ${n}`}</button>
+        </div>
+      ) : <p className="empty">Les trois entrées sont utilisées.</p>}
+    </section>
   );
 }
 
@@ -205,130 +190,117 @@ const QUESTIONS = [
   ['ai', 'Qu’a dit l’IA ?'],
 ];
 
-function Journal({ journal, setJournal, snapshot }) {
+function Journal({ snapshot }) {
+  const j = usePolling(api.journal, 300e3);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
-  const saveNote = () => {
-    setJournal(j => [{ id: uid(), at: Date.now(), answers: form, snap: snapshot() }, ...j]);
-    setForm({}); setOpen(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const notes = j.data?.journal || [];
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { const r = await api.addNote(form, snapshot()); j.set(d => ({ ...d, journal: [r.note, ...(d?.journal || [])] })); setForm({}); setOpen(false); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const hasText = Object.values(form).some(v => v?.trim());
   return (
-    <>
-      <div className="section-head"><h2>Journal</h2><span className="label">{journal.length} note{journal.length > 1 ? 's' : ''}</span></div>
-      <div className="glass card">
-        {!open && <button className="btn block" onClick={() => setOpen(true)}>Nouvelle note</button>}
-        {open && (
-          <div className="journal-form">
-            {QUESTIONS.map(([k, q]) => (
-              <label className="field" key={k} htmlFor={`j-${k}`}>
-                <span className="label">{q}</span>
-                <textarea id={`j-${k}`} rows={2} value={form[k] || ''} onChange={e => setForm({ ...form, [k]: e.target.value })} />
-              </label>
-            ))}
-            <p className="disclaim">Le prix, le P&amp;L et le statut du moment sont joints automatiquement.</p>
-            <div className="btn-row"><button className="btn" onClick={() => setOpen(false)}>Annuler</button><button className="btn primary" disabled={!hasText} onClick={saveNote}>Enregistrer</button></div>
-          </div>
-        )}
-        {journal.map(n => (
+    <section>
+      <header className="section-head"><h2>Journal</h2><span className="meta">{notes.length} note{notes.length > 1 ? 's' : ''}</span></header>
+      {!open && <button className="btn block" onClick={() => setOpen(true)}>Nouvelle note</button>}
+      {open && (
+        <div className="glass surface-2 journal-form">
+          {QUESTIONS.map(([k, q]) => (
+            <label className="field" key={k} htmlFor={`j-${k}`}>
+              <span className="field-label">{q}</span>
+              <textarea id={`j-${k}`} rows={2} value={form[k] || ''} onChange={e => setForm({ ...form, [k]: e.target.value })} />
+            </label>
+          ))}
+          <p className="fine">Le prix, le P&amp;L, le statut et le Market Pulse du moment sont joints automatiquement.</p>
+          {err && <p className="msg bad">{err}</p>}
+          <div className="btn-row"><button className="btn" onClick={() => setOpen(false)}>Annuler</button><button className="btn primary" disabled={!hasText || busy} onClick={save}>Enregistrer</button></div>
+        </div>
+      )}
+      <div className="notes">
+        {notes.map(n => (
           <article className="note" key={n.id}>
-            <div className="label">{new Date(n.at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}{n.snap?.price != null ? ` · prix ${money(n.snap.price, n.snap.cur || 'USD')}` : ''}{n.snap?.pnl != null ? ` · P&L ${eur(n.snap.pnl, 2, true)}` : ''}{n.snap?.status ? ` · ${n.snap.status}` : ''}</div>
+            <p className="note-meta num">{new Date(n.at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}{n.snap?.price != null ? ` · ${money(n.snap.price, n.snap.cur || 'USD')}` : ''}{n.snap?.pnl != null ? ` · P&L ${eur(n.snap.pnl, 2, true)}` : ''}{n.snap?.status ? ` · ${n.snap.status}` : ''}</p>
             {n.text && <p>{n.text}</p>}
             {n.answers && QUESTIONS.filter(([k]) => n.answers[k]?.trim()).map(([k, q]) => <p key={k}><span className="faint">{q}</span><br />{n.answers[k]}</p>)}
           </article>
         ))}
       </div>
-    </>
+    </section>
   );
 }
 
-function Settings({ trade, set, fx }) {
+function Settings({ trade, mutate, fx }) {
   const [open, setOpen] = useState(!trade.entries.length);
   const [manual, setManual] = useState(trade.manualPrice?.price ?? '');
-  const p = trade.product, plan = trade.plan;
-  const setP = patch => set({ product: { ...p, ...patch } });
-  const setPlan = patch => set({ plan: { ...plan, ...patch } });
+  const [pv, setPv] = useState(trade.product.pointValue);
+  const [budget, setBudget] = useState(trade.plan.plannedCapital);
+  const [maxLoss, setMaxLoss] = useState(trade.plan.maxLoss);
+  const act = useAction(mutate);
+  const p = trade.product;
+  const save = patch => act.run('settings', patch).catch(() => {});
   return (
-    <>
-      <div className="section-head"><h2>Produit et plan</h2><button className="link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Masquer' : 'Modifier'}</button></div>
-      <div className="glass card">
-        <p className="empty" style={{ marginTop: 0 }}>
-          {p.kind === 'cfd' ? 'CFD' : 'Sans levier'} · {p.direction} · coté en {p.priceCurrency} · 1 point × 1 unité = {p.pointValue} {p.priceCurrency} · prix {trade.priceSource === 'manual' ? 'saisi à la main' : 'New York (auto, différé)'}
-        </p>
-        {open && (
-          <div className="settings">
-            <Seg label="Sens" value={p.direction} options={[['LONG', 'Long'], ['SHORT', 'Short']]} onChange={v => setP({ direction: v })} />
-            <Seg label="Type de produit" value={p.kind} options={[['cfd', 'CFD / levier'], ['spot', 'Sans levier (ETC…)']]} onChange={v => setP({ kind: v })} />
-            <Seg label="Devise de cotation" value={p.priceCurrency} options={[['USD', '$ USD'], ['GBP', '£ GBP'], ['EUR', '€ EUR']]} onChange={v => set({ product: { ...p, priceCurrency: v }, priceSource: v === 'USD' ? trade.priceSource : 'manual' })} />
-            <Field id="pv" label="Valeur du point (devise par point et par unité)" value={p.pointValue} onChange={v => setP({ pointValue: parse(v) ?? 1 })} />
-            <Seg label="Prix actuel" value={trade.priceSource} options={[['NY_COCOA', 'New York auto'], ['manual', 'Saisi à la main']]} onChange={v => set({ priceSource: v })} disabled={p.priceCurrency !== 'USD' ? ['NY_COCOA'] : []} />
-            {trade.priceSource === 'manual' && (
-              <div className="form-grid">
-                <Field id="manual" label="Prix actuel chez ton courtier" value={manual} onChange={setManual} />
-                <button className="btn" onClick={() => set({ manualPrice: parse(manual) == null ? null : { price: parse(manual), at: Date.now() } })}>Mettre à jour</button>
-              </div>
-            )}
+    <section>
+      <header className="section-head"><h2>Produit et plan</h2><button className="link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Masquer' : 'Modifier'}</button></header>
+      <p className="empty">{p.kind === 'cfd' ? 'CFD' : 'Sans levier'} · {p.direction} · coté en {p.priceCurrency} · 1 point × 1 unité = {p.pointValue} {p.priceCurrency} · prix {trade.priceSource === 'manual' ? 'saisi à la main' : 'New York (auto, différé)'}</p>
+      {open && (
+        <div className="glass surface-2 settings">
+          <Seg label="Sens" value={p.direction} options={[['LONG', 'Long'], ['SHORT', 'Short']]} onChange={v => save({ product: { direction: v } })} />
+          <Seg label="Type de produit" value={p.kind} options={[['cfd', 'CFD / levier'], ['spot', 'Sans levier']]} onChange={v => save({ product: { kind: v } })} />
+          <Seg label="Devise de cotation" value={p.priceCurrency} options={[['USD', '$ USD'], ['GBP', '£ GBP'], ['EUR', '€ EUR']]} onChange={v => save({ product: { priceCurrency: v } })} />
+          <Seg label="Prix actuel" value={trade.priceSource} options={[['NY_COCOA', 'New York auto'], ['manual', 'Saisi à la main']]} onChange={v => save({ priceSource: v })} disabled={p.priceCurrency !== 'USD' ? ['NY_COCOA'] : []} />
+          {trade.priceSource === 'manual' && (
             <div className="form-grid">
-              <Field id="budget" label="Budget maximum" value={plan.plannedCapital} onChange={v => setPlan({ plannedCapital: parse(v) ?? 150 })} suffix="€" />
-              <Field id="maxloss" label="Perte maximale" value={plan.maxLoss} onChange={v => setPlan({ maxLoss: parse(v) ?? 50 })} suffix="€" />
+              <Field id="manual" label="Prix actuel chez ton courtier" value={manual} onChange={setManual} suffix={SYM[p.priceCurrency]} />
+              <button className="btn" disabled={act.busy} onClick={() => act.run('manualPrice', { price: parse(manual) }).catch(() => {})}>Mettre à jour</button>
             </div>
-            <p className="disclaim">Taux BCE {fx.data?.date ? `du ${fx.data.date}` : 'indisponible'} : 1 € = {num(fx.data?.raw?.EURUSD, 4)} $ · {num(fx.data?.raw?.EURGBP, 4)} £. Pour un CFD cacao coté par tonne, la valeur du point est en général 1 et la quantité est en tonnes : vérifie la fiche du produit chez ton courtier.</p>
+          )}
+          <div className="form-grid">
+            <Field id="pv" label="Valeur du point" value={pv} onChange={setPv} />
+            <Field id="budget" label="Budget maximum" value={budget} onChange={setBudget} suffix="€" />
+            <Field id="maxloss" label="Perte maximale" value={maxLoss} onChange={setMaxLoss} suffix="€" />
           </div>
-        )}
-      </div>
-    </>
+          <button className="btn" disabled={act.busy} onClick={() => save({ product: { pointValue: parse(pv) }, plan: { plannedCapital: parse(budget), maxLoss: parse(maxLoss) } })}>Enregistrer le plan</button>
+          {act.error && <p className="msg bad">{act.error}</p>}
+          <p className="fine">Taux BCE {fx.data?.date ? `du ${fx.data.date}` : 'indisponible'} : 1 € = {num(fx.data?.raw?.EURUSD, 4)} $ · {num(fx.data?.raw?.EURGBP, 4)} £. Pour un CFD cacao coté par tonne, la valeur du point vaut en général 1 et la quantité est en tonnes : vérifie la fiche du produit chez ton courtier.</p>
+        </div>
+      )}
+    </section>
   );
 }
 
 function Seg({ label, value, options, onChange, disabled = [] }) {
   return (
     <div className="field">
-      <span className="label">{label}</span>
-      <div className="seg-ctl">
-        {options.map(([v, l]) => <button key={v} aria-pressed={v === value} disabled={disabled.includes(v)} onClick={() => onChange(v)}>{l}</button>)}
+      <span className="field-label">{label}</span>
+      <div className="seg">
+        {options.map(([v, l]) => <button key={v} aria-pressed={v === value} disabled={disabled.includes(v)} onClick={() => v !== value && onChange(v)}>{l}</button>)}
       </div>
     </div>
   );
 }
 
-function DataTools({ setTrade, trade }) {
-  const file = useRef(null);
+function DataTools({ trade, mutate }) {
   const [confirm, setConfirm] = useState(null);
-  const [msg, setMsg] = useState('');
-  const download = () => {
-    const blob = new Blob([JSON.stringify(exportAll(), null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `cocoa-war-room-${today()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    setMsg('Sauvegarde téléchargée.');
-  };
-  const upload = async e => {
-    const f = e.target.files?.[0]; if (!f) return;
-    try { importAll(JSON.parse(await f.text())); setMsg('Sauvegarde restaurée. Rechargement…'); setTimeout(() => location.reload(), 600); }
-    catch (err) { setMsg(`Import impossible : ${err.message}`); }
-  };
+  const act = useAction(mutate);
+  const run = (a, payload) => act.run(a, payload).catch(() => {}).finally(() => setConfirm(null));
   return (
-    <>
-      <div className="section-head"><h2>Données</h2><span className="label">Sur cet appareil</span></div>
-      <div className="glass card">
-        <div className="btn-row">
-          <button className="btn" onClick={download}>Exporter</button>
-          <button className="btn" onClick={() => file.current.click()}>Importer</button>
-          <input ref={file} type="file" accept="application/json" hidden onChange={upload} />
-        </div>
-        <div className="btn-row" style={{ marginTop: 8 }}>
-          {confirm === 'close'
-            ? <><button className="btn danger" onClick={() => { setTrade(t => ({ ...t, closed: true })); setConfirm(null); }}>Confirmer la clôture</button><button className="btn" onClick={() => setConfirm(null)}>Annuler</button></>
-            : <button className="btn" disabled={!trade.entries.length || trade.closed} onClick={() => setConfirm('close')}>Clôturer la position</button>}
-          {confirm === 'reset'
-            ? <><button className="btn danger" onClick={() => { setTrade(t => ({ ...t, entries: [], stop: null, targets: [], closed: false, stopHistory: [] })); setConfirm(null); }}>Tout effacer</button><button className="btn" onClick={() => setConfirm(null)}>Annuler</button></>
-            : <button className="btn" onClick={() => setConfirm('reset')}>Nouvelle position</button>}
-        </div>
-        {msg && <p className="disclaim">{msg}</p>}
-        <p className="disclaim">« Nouvelle position » efface les entrées, le stop et les objectifs, pas le journal. Exporte d’abord si tu veux garder une trace.</p>
+    <section>
+      <header className="section-head"><h2>Données</h2><span className="meta">base Supabase</span></header>
+      <div className="btn-row">
+        <a className="btn" href="/api/state?export=1" download>Exporter tout</a>
+        {confirm === 'close'
+          ? <><button className="btn danger" onClick={() => run('close')}>Confirmer la clôture</button><button className="btn" onClick={() => setConfirm(null)}>Annuler</button></>
+          : <button className="btn" disabled={!trade.entries.length || trade.closed} onClick={() => setConfirm('close')}>Clôturer la position</button>}
+        {confirm === 'new'
+          ? <><button className="btn danger" onClick={() => run('newPosition')}>Archiver et repartir</button><button className="btn" onClick={() => setConfirm(null)}>Annuler</button></>
+          : <button className="btn" onClick={() => setConfirm('new')}>Nouvelle position</button>}
       </div>
-    </>
+      {act.error && <p className="msg bad">{act.error}</p>}
+      <p className="fine">« Nouvelle position » archive la position actuelle (elle reste dans la base et dans l’export) et en ouvre une vide avec le même produit et le même plan.</p>
+    </section>
   );
 }

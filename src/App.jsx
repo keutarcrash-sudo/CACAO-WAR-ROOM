@@ -1,86 +1,124 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Flow } from './components/Flow.jsx';
+import { flushSync } from 'react-dom';
+import { Field } from './components/Field.jsx';
 import { TabBar, TABS } from './components/TabBar.jsx';
 import { Sheet } from './components/Sheet.jsx';
 import { PulseDetail } from './components/Pulse.jsx';
+import { AlertDetail } from './components/Timeline.jsx';
+import { Takeover } from './components/Takeover.jsx';
+import { Login, Setup } from './components/Gate.jsx';
+import { Brand } from './components/Brand.jsx';
 import { WarRoom } from './pages/WarRoom.jsx';
 import { Market } from './pages/Market.jsx';
 import { Fundamentals } from './pages/Fundamentals.jsx';
 import { Intel } from './pages/Intel.jsx';
 import { Trade } from './pages/Trade.jsx';
 import { usePolling } from './hooks/usePolling.js';
-import { useStored } from './hooks/useStored.js';
-import { fetchMarket, fetchFx } from './lib/api.js';
-import { load, save } from './lib/store.js';
+import { useLongPress } from './hooks/useLongPress.js';
+import { api, sendVisit } from './lib/api.js';
 import { marketPulse, evaluateWarRoom } from '../lib/engines/warroom.js';
 import { atr } from '../lib/engines/technical.js';
-import { computePosition, DEFAULT_PLAN, DEFAULT_PRODUCT } from '../lib/engines/trade.js';
-
-export const DEFAULT_TRADE = {
-  product: DEFAULT_PRODUCT,
-  plan: DEFAULT_PLAN,
-  priceSource: 'NY_COCOA',
-  manualPrice: null,
-  entries: [],
-  stop: null,
-  targets: [],
-  closed: false,
-};
-
-const MODULES = { fundamentals: false, confluence: false };
+import { computePosition } from '../lib/engines/trade.js';
 
 export default function App() {
+  const auth = usePolling(api.auth, 24 * 3600e3);
+  const [gate, setGate] = useState(null); // forced state after a 401 / 503 from another route
+
+  if (auth.loading && !auth.data) return <><Field energy={0.2} /><main className="gate"><Brand large /></main></>;
+  const a = auth.data;
+  const missing = [];
+  if (a && !a.configured) missing.push('le mot de passe');
+  if ((a && !a.database) || gate === 'db') missing.push('la base de données');
+  if (auth.error || missing.length) return <><Field energy={0.2} /><Setup missing={missing.length ? missing : ['la configuration du serveur']} /></>;
+  if (!a.authenticated || gate === 'login') {
+    return <><Field energy={0.2} /><Login onDone={async pw => { await api.login(pw); setGate(null); await auth.reload(); }} /></>;
+  }
+  return <Room onUnauthorized={() => setGate('login')} onDbMissing={() => setGate('db')} />;
+}
+
+function Room({ onUnauthorized, onDbMissing }) {
   const [tab, setTab] = useState(() => {
     const h = location.hash.slice(1);
     return TABS.some(t => t.id === h) ? h : 'warroom';
   });
-  const [dir, setDir] = useState(1);
   const [sheet, setSheet] = useState(null);
-  const [trade, setTrade] = useStored('trade', DEFAULT_TRADE);
+  const [burst, setBurst] = useState(0);
+  const tip = useLongPress();
 
-  // Daily NY data drives the War Room (price, ATR, pulse). Refreshed every minute while visible.
-  const ny = usePolling(() => fetchMarket('NY_COCOA', 'D1'), 60e3);
-  const fx = usePolling(fetchFx, 6 * 3600e3);
+  const ny = usePolling(() => api.market('NY_COCOA', 'D1'), 60e3);
+  const intraday = usePolling(() => api.market('NY_COCOA', '1H'), 120e3);
+  const fx = usePolling(api.fx, 6 * 3600e3);
+  const st = usePolling(api.state, 60e3);
+
+  // any route answering 401 / 503 sends us back to the right gate
+  useEffect(() => {
+    for (const e of [ny.error, st.error, fx.error]) {
+      if (e?.status === 401) onUnauthorized();
+      if (e?.code === 'DB_NOT_CONFIGURED') onDbMissing();
+    }
+  }, [ny.error, st.error, fx.error, onUnauthorized, onDbMissing]);
+
   const market = ny.data;
   const daily = market?.candles?.length ? market.candles : null;
+  const trade = st.data?.trade ?? null;
+  const alerts = st.data?.alerts ?? [];
+
+  // the snapshot of the previous visit is read once, before this visit overwrites it
+  const lastVisit = useRef(undefined);
+  if (lastVisit.current === undefined && st.data) lastVisit.current = st.data.lastVisit ?? null;
 
   const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote }), [daily, market?.quote]);
-  const war = useMemo(() => evaluateWarRoom({ market, daily, modules: MODULES }), [market, daily]);
+  const war = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: false, confluence: false } }), [market, daily]);
   const atr14 = useMemo(() => (daily ? atr(daily) : null), [daily]);
 
-  const tradePrice = trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market?.quote?.price ?? null;
-  const eurPerUnit = fx.data?.eurPer?.[trade.product.priceCurrency] ?? null;
-  const position = useMemo(() => computePosition({
+  const tradePrice = !trade ? null : trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market?.quote?.price ?? null;
+  const eurPerUnit = trade ? fx.data?.eurPer?.[trade.product.priceCurrency] ?? null : null;
+  const position = useMemo(() => computePosition(trade ? {
     entries: trade.entries, product: trade.product, plan: trade.plan, stop: trade.stop,
     targets: trade.targets, price: tradePrice, eurPerUnit, closed: trade.closed,
-  }), [trade, tradePrice, eurPerUnit]);
+  } : {}), [trade, tradePrice, eurPerUnit]);
 
-  // "What changed since your last visit": read the previous snapshot once, save a new one when leaving.
-  const prevSnapshot = useRef(load('snapshot', null));
-  const current = useRef(null);
-  current.current = { at: Date.now(), price: market?.quote?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null };
+  // save "this visit" when the page is hidden, for the next "what changed"
+  const snap = useRef(null);
+  snap.current = { price: market?.quote?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null };
   useEffect(() => {
-    const store = () => { if (current.current.price != null) save('snapshot', current.current); };
-    const onVis = () => document.hidden && store();
+    const save = () => { if (snap.current.price != null) sendVisit(snap.current); };
+    const onVis = () => document.hidden && save();
     document.addEventListener('visibilitychange', onVis);
-    addEventListener('pagehide', store);
-    return () => { document.removeEventListener('visibilitychange', onVis); removeEventListener('pagehide', store); };
+    addEventListener('pagehide', save);
+    return () => { document.removeEventListener('visibilitychange', onVis); removeEventListener('pagehide', save); };
   }, []);
+
+  // critical, not yet acknowledged: takes the screen
+  const critical = alerts.find(x => x.level === 'CRITICAL' && !x.acknowledged) || null;
+  const seen = useRef(new Set());
+  useEffect(() => {
+    if (critical && !seen.current.has(critical.id)) { seen.current.add(critical.id); setBurst(b => b + 1); }
+  }, [critical]);
+  const ack = async id => { st.set(d => ({ ...d, alerts: d.alerts.map(x => (x.id === id ? { ...x, acknowledged: true } : x)) })); await api.ack(id).catch(() => {}); };
+
+  const mutate = useCallback(async (action, payload) => {
+    const r = await api.trade(action, payload);
+    st.set(d => ({ ...d, trade: r.trade }));
+    st.reload();
+    return r.trade;
+  }, [st]);
 
   const go = useCallback(id => {
-    setTab(cur => {
-      if (cur === id) return cur;
-      setDir(TABS.findIndex(t => t.id === id) > TABS.findIndex(t => t.id === cur) ? 1 : -1);
-      return id;
-    });
+    if (id === tab) return;
     history.replaceState(null, '', `#${id}`);
-    scrollTo({ top: 0 });
-  }, []);
+    const apply = () => { setTab(id); scrollTo({ top: 0 }); };
+    // View Transitions: shared elements (the position card) morph into their page
+    if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.documentElement.dataset.dir = TABS.findIndex(t => t.id === id) > TABS.findIndex(t => t.id === tab) ? 'fwd' : 'back';
+      document.startViewTransition(() => flushSync(apply));
+    } else apply();
+  }, [tab]);
 
-  // Swipe left / right between sections (never the only way: the tab bar does the same).
+  // swipe between sections (the tab bar always does the same)
   useEffect(() => {
     let x = 0, y = 0, ok = false;
-    const start = e => { const t = e.touches[0]; x = t.clientX; y = t.clientY; ok = !e.target.closest('.no-swipe, .sheet, input, textarea, select'); };
+    const start = e => { const t = e.touches[0]; x = t.clientX; y = t.clientY; ok = !e.target.closest('.no-swipe, .sheet, input, textarea, select, .takeover'); };
     const end = e => {
       if (!ok || sheet) return;
       const t = e.changedTouches[0], dx = t.clientX - x, dy = t.clientY - y;
@@ -94,7 +132,7 @@ export default function App() {
     return () => { removeEventListener('touchstart', start); removeEventListener('touchend', end); };
   }, [tab, sheet, go]);
 
-  // Dynamic glass: a slow reflection follows the pointer.
+  // dynamic glass: a slow reflection follows the finger or the pointer
   useEffect(() => {
     const move = e => {
       const g = e.target.closest?.('.glass'); if (!g) return;
@@ -104,50 +142,56 @@ export default function App() {
       g.classList.add('lit');
     };
     const out = e => { const g = e.target.closest?.('.glass'); if (g && !g.contains(e.relatedTarget)) g.classList.remove('lit'); };
+    const up = e => { if (e.pointerType === 'touch') setTimeout(() => document.querySelectorAll('.glass.lit').forEach(g => g.classList.remove('lit')), 700); };
     addEventListener('pointermove', move, { passive: true });
     addEventListener('pointerout', out);
-    return () => { removeEventListener('pointermove', move); removeEventListener('pointerout', out); };
+    addEventListener('pointerup', up);
+    return () => { removeEventListener('pointermove', move); removeEventListener('pointerout', out); removeEventListener('pointerup', up); };
   }, []);
 
   const closeSheet = useCallback(() => setSheet(null), []);
-  // keep the content while the sheet slides out
   const lastSheet = useRef(null);
   if (sheet) lastSheet.current = sheet;
-  const shownSheet = sheet || lastSheet.current;
-  const ctx = { market, marketState: ny, daily, fx, pulse, war, atr14, trade, setTrade, position, tradePrice, eurPerUnit, go, openSheet: setSheet, prevSnapshot: prevSnapshot.current };
+  const shown = sheet || lastSheet.current;
+
+  const ctx = {
+    market, marketState: ny, intraday: intraday.data, daily, fx, pulse, war, atr14, trade, tradeState: st, mutate,
+    position, tradePrice, eurPerUnit, alerts, lastVisit: lastVisit.current, go, openSheet: setSheet,
+  };
 
   return (
     <>
-      <Flow energy={pulse.value == null ? 0.25 : pulse.value / 100} />
+      <Field energy={pulse.value == null ? 0.25 : pulse.value / 100} burst={burst} />
       <div className="app">
         <header className="top">
-          <div className="brand">
-            <svg className="brand-mark" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-              <ellipse cx="13" cy="13" rx="7.2" ry="11" stroke="#62C6DE" strokeWidth="1.2" />
-              <path d="M13 2.4v21.2" stroke="#62C6DE" strokeWidth="1" opacity=".6" />
-              <path d="M7.4 8.5c3.4 1.6 7.8 1.6 11.2 0M7 13c3.6 1.7 8.4 1.7 12 0M7.4 17.5c3.4 1.6 7.8 1.6 11.2 0" stroke="#62C6DE" strokeWidth=".9" opacity=".45" />
-            </svg>
-            <div className="brand-name">Cocoa War Room<span>v0.1 · Phase 1–2</span></div>
-          </div>
-          <button className="mini-pulse" style={{ '--pd': pulse.level === 'calm' ? '4.2s' : pulse.level === 'active' ? '2.6s' : '1.5s' }} onClick={() => setSheet('pulse')} aria-label="Market Pulse">
-            <i /> <span className="num">{pulse.value ?? '—'}</span>
-          </button>
+          <Brand sub={tab === 'warroom' ? null : TABS.find(t => t.id === tab)?.label} />
+          <span className={`live live-${market?.status === 'OK' ? 'on' : 'off'}`}>
+            <i aria-hidden="true" />{market?.status === 'OK' ? 'Live · différé' : market?.status === 'OFFLINE' ? 'Hors ligne' : '…'}
+          </span>
         </header>
-
-        <main key={tab} className="view enter" style={{ '--dir': dir }}>
-          {tab === 'warroom' && <WarRoom {...ctx} />}
-          {tab === 'market' && <Market {...ctx} />}
-          {tab === 'fund' && <Fundamentals />}
-          {tab === 'intel' && <Intel />}
-          {tab === 'trade' && <Trade {...ctx} />}
+        <main className="view">
+          {!trade && st.loading ? <p className="empty center">Chargement…</p> : (
+            <>
+              {tab === 'warroom' && <WarRoom {...ctx} />}
+              {tab === 'market' && <Market {...ctx} />}
+              {tab === 'fund' && <Fundamentals />}
+              {tab === 'intel' && <Intel alerts={alerts} openSheet={setSheet} />}
+              {tab === 'trade' && trade && <Trade {...ctx} />}
+            </>
+          )}
         </main>
       </div>
 
-      <TabBar current={tab} onChange={go} />
+      <TabBar current={tab} onChange={go} badge={alerts.some(x => x.level !== 'INFORMATION' && !x.acknowledged) ? 'intel' : null} />
 
       <Sheet open={!!sheet} onClose={closeSheet}>
-        {shownSheet === 'pulse' && <PulseDetail pulse={pulse} />}
+        {shown?.type === 'pulse' && <PulseDetail pulse={pulse} />}
+        {shown?.type === 'alert' && <AlertDetail alert={shown.alert} />}
       </Sheet>
+
+      <Takeover alert={critical} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />
+
+      {tip && <div className="tip" role="tooltip" style={{ left: tip.x, top: tip.y }}><b>{tip.title}</b>{tip.text}</div>}
     </>
   );
 }

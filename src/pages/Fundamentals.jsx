@@ -7,17 +7,13 @@ const ROWS = [
   { name: 'Arrivages Côte d’Ivoire', source: 'Estimations d’exportateurs · saisie assistée' },
   { name: 'Stocks ICE', source: 'ICE Report Center · stocks certifiés' },
   { name: 'Demande (grindings)', source: 'ECA, NCA, CAA · trimestriel' },
-  { name: 'Positioning', source: 'CFTC COT · Managed Money, percentiles 3 ans' },
+  { name: 'Positioning', source: 'CFTC COT · Managed Money, percentiles sur 3 ans' },
 ];
 
 export function Fundamentals() {
   return (
-    <Pending
-      eyebrow="Biais fondamental"
-      title="Fondamentaux"
-      phase="phase 4"
+    <Pending eyebrow="Biais fondamental" title="Fondamentaux" phase="phase 4"
       lead="Chaque facteur sera noté de −2 à +2 par une règle écrite, avec sa source et sa fraîcheur. Un facteur sans donnée ne sera jamais compté."
-      rows={ROWS}
-    />
+      rows={ROWS} />
   );
 }

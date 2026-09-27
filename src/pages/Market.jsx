@@ -4,24 +4,23 @@ import { Chart } from '../components/Chart.jsx';
 import { Freshness } from '../components/Freshness.jsx';
 import { Num } from '../components/Num.jsx';
 import { usePolling } from '../hooks/usePolling.js';
-import { fetchMarket } from '../lib/api.js';
+import { api } from '../lib/api.js';
 import { money, num, pct } from '../lib/format.js';
-import { previousLevels, structure, volatilityRatio, atr } from '../../lib/engines/technical.js';
+import { previousLevels, structure, volatilityRatio } from '../../lib/engines/technical.js';
 
 const TFS = ['W1', 'D1', '4H', '1H', '15M', '5M'];
 const STRUCT_TFS = ['W1', 'D1', '4H', '1H', '15M'];
 const NOTES = { '15M': '15M : timing de l’entrée.', '5M': '5M : timing uniquement. Ne modifie jamais le contexte Daily.' };
 
-export function Market({ market, daily, trade, position }) {
+export function Market({ market, daily, atr14, trade, position }) {
   const [tf, setTf] = useState('D1');
   const [ov, setOv] = useState({ prev: true, piv: false, pos: true });
-  const tfData = usePolling(() => (tf === 'D1' ? Promise.resolve(market) : fetchMarket('NY_COCOA', tf)), tf === 'D1' ? 3600e3 : 60e3, [tf, tf === 'D1' ? market : null]);
-  const data = tf === 'D1' ? market : tfData.data;
+  const other = usePolling(() => api.market('NY_COCOA', tf), 60e3, [tf], { enabled: tf !== 'D1' });
+  const data = tf === 'D1' ? market : other.data;
   const candles = useMemo(() => dedupe(data?.candles), [data]);
 
   const lv = useMemo(() => (daily ? previousLevels(daily) : null), [daily]);
   const vr = useMemo(() => (daily ? volatilityRatio(daily) : null), [daily]);
-  const a = useMemo(() => (daily ? atr(daily) : null), [daily]);
   const showPos = trade.priceSource === 'NY_COCOA' && trade.product.priceCurrency === 'USD' && position.entriesCount > 0;
 
   const levels = useMemo(() => {
@@ -47,72 +46,69 @@ export function Market({ market, daily, trade, position }) {
 
   return (
     <>
-      <section className="hero hero-compact">
-        <div>
-          <div className="label">New York Cocoa · {market?.instrument?.contract || 'CC=F'}</div>
-          <div className="price price-md">{q?.price != null ? <><span className="cur">$</span><Num value={q.price} format={x => num(x)} /></> : '—'}</div>
-          <div className="chg-row">
-            {q?.changePct != null && <span className={`chg ${q.changePct >= 0 ? 'up' : 'down'}`}>{q.changePct >= 0 ? '▲' : '▼'} {pct(q.changePct)}</span>}
-            <Freshness market={market} />
-          </div>
+      <section className="page-hero">
+        <p className="eyebrow">New York Cocoa · contrat continu</p>
+        <div className="price price-md">{q?.price != null ? <><span className="cur">$</span><Num value={q.price} format={x => num(x)} /></> : '—'}</div>
+        <div className="price-meta">
+          {q?.changePct != null && <span className={`chg num ${q.changePct >= 0 ? 'up' : 'down'}`}>{q.changePct >= 0 ? '▲' : '▼'} {pct(q.changePct)}</span>}
+          <Freshness market={market} />
         </div>
       </section>
 
-      <div className="seg-ctl no-swipe" role="group" aria-label="Unité de temps">
+      <div className="seg no-swipe" role="group" aria-label="Unité de temps">
         {TFS.map(t => <button key={t} aria-pressed={t === tf} onClick={() => setTf(t)}>{t}</button>)}
       </div>
-      <div className="tf-note">{NOTES[tf] || ''}</div>
+      <p className="tf-note">{NOTES[tf] || ''}</p>
 
-      <div className="glass chart-wrap no-swipe">
+      <div className="glass surface-2 chart-wrap no-swipe">
         {candles?.length ? <Chart candles={candles} levels={levels} /> : (
-          <div className="chart-empty">{tfData.loading && tf !== 'D1' ? 'Chargement…' : data?.status === 'OFFLINE' ? 'Source hors ligne. Aucune bougie disponible.' : 'Aucune donnée pour cette unité de temps.'}</div>
+          <div className="chart-empty">{tf !== 'D1' && other.loading ? 'Chargement…' : data?.status === 'OFFLINE' ? 'Source hors ligne. Aucune bougie disponible.' : 'Aucune donnée pour cette unité de temps.'}</div>
         )}
       </div>
       {tf !== 'D1' && data && <div className="chart-foot"><Freshness market={data} /></div>}
 
       <div className="chips no-swipe">
-        <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={ov.prev} onClick={() => toggle('prev')}><i />PDH / PDL · PWH / PWL</button>
-        <button className="toggle" style={{ '--c': 'var(--ink-3)' }} aria-pressed={ov.piv} onClick={() => toggle('piv')}><i />Pivots jour</button>
+        <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={ov.prev} onClick={() => toggle('prev')}><i />Veille · semaine</button>
+        <button className="toggle" style={{ '--c': 'var(--ink-3)' }} aria-pressed={ov.piv} onClick={() => toggle('piv')}><i />Pivots</button>
         <button className="toggle" style={{ '--c': 'var(--ink)' }} aria-pressed={ov.pos} onClick={() => toggle('pos')} disabled={!showPos} title={showPos ? '' : 'Visible si ta position est en USD sur le prix New York'}><i />Ma position</button>
       </div>
 
-      <div className="section-head"><h2>Niveaux</h2><span className="label">Calculés sur le Daily</span></div>
-      <div className="kv">
-        <div><span className="label">ATR 14 jours</span><b>{money(a, 'USD')}</b><small>{vr != null ? `${num(vr, 2)}× sa moyenne 20 j · ${vr > 1.2 ? 'expansion' : vr < 0.8 ? 'compression' : 'normale'}` : '—'}</small></div>
-        <div><span className="label">Pivot jour</span><b>{money(lv?.dailyPivots.P, 'USD')}</b><small>R1 {money(lv?.dailyPivots.R1, 'USD')} · S1 {money(lv?.dailyPivots.S1, 'USD')}</small></div>
-        <div><span className="label">Veille · haut / bas</span><b>{money(lv?.PDH, 'USD')}</b><small>bas {money(lv?.PDL, 'USD')}</small></div>
-        <div><span className="label">Semaine préc. · haut / bas</span><b>{money(lv?.PWH, 'USD')}</b><small>bas {money(lv?.PWL, 'USD')}</small></div>
-      </div>
+      <header className="section-head"><h2>Niveaux</h2><span className="meta">calculés sur le Daily</span></header>
+      <ul className="rows levels">
+        <li><span className="row-main">Plus haut de la semaine passée<small>PWH · buy-side estimée</small></span><span className="row-side num">{money(lv?.PWH, 'USD')}</span></li>
+        <li><span className="row-main">Plus haut de la veille<small>PDH · buy-side estimée</small></span><span className="row-side num">{money(lv?.PDH, 'USD')}</span></li>
+        <li><span className="row-main">Pivot du jour<small>R1 {money(lv?.dailyPivots.R1, 'USD')} · S1 {money(lv?.dailyPivots.S1, 'USD')}</small></span><span className="row-side num">{money(lv?.dailyPivots.P, 'USD')}</span></li>
+        <li><span className="row-main">Plus bas de la veille<small>PDL · sell-side estimée</small></span><span className="row-side num">{money(lv?.PDL, 'USD')}</span></li>
+        <li><span className="row-main">Plus bas de la semaine passée<small>PWL · sell-side estimée</small></span><span className="row-side num">{money(lv?.PWL, 'USD')}</span></li>
+        <li><span className="row-main">ATR 14 jours<small>{vr != null ? `${num(vr, 2)}× sa moyenne 20 j · ${vr > 1.2 ? 'expansion' : vr < 0.8 ? 'compression' : 'normale'}` : '—'}</small></span><span className="row-side num">{money(atr14, 'USD')}</span></li>
+      </ul>
 
-      <StructureGrid market={market} />
+      <StructureStrip market={market} />
 
-      <div className="section-head"><h2>London Cocoa</h2><span className="label">ICE Futures Europe</span></div>
-      <div className="glass card">
-        <Freshness info={{ key: 'na', label: 'Data unavailable' }} />
-        <p className="empty">Aucune source gratuite fiable pour Londres. Elle sera branchée via l’API de ton courtier quand tu l’auras choisi.</p>
-      </div>
+      <header className="section-head"><h2>London Cocoa</h2><span className="meta">ICE Futures Europe</span></header>
+      <p className="empty"><Freshness info={{ key: 'na', label: 'Indisponible' }} /><br />Aucune source gratuite fiable pour Londres. Elle sera branchée via l’API de ton courtier.</p>
       <p className="foot">Source : {market?.source?.name || '—'}. Données différées, non officielles.</p>
     </>
   );
 }
 
-function StructureGrid({ market }) {
-  // One cached request per timeframe, refreshed every 10 minutes: structure changes slowly.
+function StructureStrip({ market }) {
+  // structure changes slowly: one request per timeframe every 10 minutes
   const all = usePolling(async () => {
-    const res = await Promise.all(STRUCT_TFS.map(t => (t === 'D1' && market ? Promise.resolve(market) : fetchMarket('NY_COCOA', t).catch(() => null))));
+    const res = await Promise.all(STRUCT_TFS.map(t => (t === 'D1' && market ? Promise.resolve(market) : api.market('NY_COCOA', t).catch(() => null))));
     return Object.fromEntries(STRUCT_TFS.map((t, i) => [t, res[i]?.candles?.length ? structure(dedupe(res[i].candles)) : null]));
   }, 600e3, [!!market]);
   return (
     <>
-      <div className="section-head"><h2>Structure</h2><span className="label">Contexte → timing</span></div>
-      <div className="tf-grid">
+      <header className="section-head"><h2>Structure</h2><span className="meta">contexte → timing</span></header>
+      <ol className="tf-strip">
         {STRUCT_TFS.map(t => {
           const s = all.data?.[t];
-          const cls = s?.trend === 'BULLISH' ? 'up' : s?.trend === 'BEARISH' ? 'down' : 'muted';
-          return <div key={t}><b>{t}</b><span className={cls}>{s ? s.label : all.loading ? '…' : 'N/D'}</span></div>;
+          const cls = s?.trend === 'BULLISH' ? 'up' : s?.trend === 'BEARISH' ? 'down' : 'faint';
+          return <li key={t} className={cls}><b>{t}</b><span>{s ? s.label : all.loading ? '…' : 'N/D'}</span></li>;
         })}
-      </div>
-      <p className="disclaim">Structure simplifiée : compare les deux derniers sommets et creux (fractales). BOS / CHoCH arrivent en phase 6.</p>
+      </ol>
+      <p className="fine">Structure simplifiée : deux derniers sommets et creux. BOS et CHoCH arrivent avec le moteur ICT.</p>
     </>
   );
 }

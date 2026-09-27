@@ -6,7 +6,7 @@ export const TABS = [
   { id: 'trade', label: 'Trade', icon: <><path d="M3 17h18" strokeLinecap="round" /><path d="M4 14l4-4 3 3 6-7" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 6h3v3" strokeLinecap="round" /></> },
 ];
 
-export function TabBar({ current, onChange }) {
+export function TabBar({ current, onChange, badge }) {
   const i = TABS.findIndex(t => t.id === current);
   return (
     <nav className="tabbar" aria-label="Sections">
@@ -16,6 +16,7 @@ export function TabBar({ current, onChange }) {
           <button key={t.id} className="tab" aria-current={t.id === current ? 'page' : undefined} onClick={() => onChange(t.id)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">{t.icon}</svg>
             <span>{t.label}</span>
+            {badge === t.id && <i className="tab-badge" aria-label="nouveaux événements" />}
           </button>
         ))}
       </div>

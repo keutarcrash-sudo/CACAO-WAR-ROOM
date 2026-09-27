@@ -191,3 +191,23 @@ Budget : moins de 150 Ko de JavaScript compressé au premier chargement, 60 imag
 | « Confidence 82 % » sur une news | **LOW / MEDIUM / HIGH** | Un pourcentage donnerait une fausse précision à un jugement qualitatif |
 | Statut « WATCHING » avec 8 points | **Setup en formation** à 8 points | Aligne le statut sur les seuils du score (5-7 watch, 8-10 interesting) |
 | Textes en anglais (WHAT CHANGED…) | Interface en **français**, termes techniques gardés en anglais (BOS, FVG, sweep, bullish) | Lecture plus rapide, vocabulaire de trading inchangé |
+
+---
+
+## 10. Révision 0.2 : ce qui a été corrigé par rapport à la direction artistique
+
+La v0.1 ressemblait à un tableau de bord générique : beaucoup de cartes identiques, des étiquettes en capitales partout, un verre invisible. Ce qui change :
+
+| DA | v0.1 | v0.2 |
+|---|---|---|
+| §8-9 Glass et profondeur | Verre posé sur un fond uniforme, donc invisible | Fond de **champs de lumière** qui dérivent lentement ; le verre les floute réellement. Bord spéculaire en dégradé. 4 niveaux d'opacité |
+| §11-12 Flow réactif | Lignes quasi invisibles | Lignes et lumière dont la vitesse et l'intensité suivent le Pulse ; convergence vers le centre sur alerte critique |
+| §13-14 Market Pulse | Simple point | Anneaux qui respirent + **un arc par composante** : allumé si la donnée est branchée, éteint sinon |
+| §15-16 War Room Status | Carte « Rien à faire » isolée | Pièce centrale : forme + mot + couleur, lueur de l'état, liseré qui tourne au changement d'état, « avant d'envisager une entrée » |
+| §17-19, 54 Scroll storytelling et pinning | Absent | **Lecture du marché** : graphique épinglé pendant que défilent prix → structure → liquidités → pivots → position → verdict, chaque couche apparaît en fondu |
+| §23-24 Market Story | Absente | Timeline des événements stockés en base, la ligne se dessine à l'arrivée |
+| §26 Transitions « élément partagé » | Absentes | La carte Position devient l'en-tête du Trade Manager (View Transitions API) |
+| §37 Alertes critiques | Absentes | Prise d'écran pour les événements critiques non lus, puis retour au contexte |
+| §42 Espace, « pas 25 cartes » | Grilles de tuiles encadrées | Listes à filets fins ; le verre est réservé au statut, à la lecture du marché, à la position et aux formulaires |
+| §41 Typographie | Capitales mono partout | Capitales supprimées ; mono réservé aux chiffres et horodatages ; chiffres héros en graisse 200 |
+| §53 Parallax | Absent | Le prix glisse et s'efface légèrement au défilement |
