@@ -23,7 +23,7 @@ afterAll(async () => { await sql?.end(); await server?.stop(); await pg?.close()
 describe('schema', () => {
   it('records the migration once', async () => {
     const v = await sql`select version from schema_version`;
-    expect(v.map(r => r.version)).toEqual([1, 2]);
+    expect(v.map(r => r.version)).toEqual([1, 2, 3]);
   });
 });
 
@@ -127,5 +127,26 @@ describe('DATABASE_URL parsing', () => {
   });
   it('rejects something that is not a connection string', () => {
     expect(() => parseDatabaseUrl('https://abc.supabase.co')).toThrow();
+  });
+});
+
+describe('fundamentals service', () => {
+  it('works with every source offline, then with manual entries', async () => {
+    const { loadFundamentals } = await import('../lib/services/fundamentals.js');
+    const real = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    try {
+      let r = await loadFundamentals(sql);
+      expect(r.score.bias).toBe('INSUFFICIENT');
+      expect(r.factors.every(f => f.score == null)).toBe(true);
+      expect(r.cot.status).toBe('OFFLINE');
+      await repo.addFundamental(sql, { metric: 'production', region: 'GH', value: 620, previous: 760, dataTime: new Date().toISOString(), source: 'COCOBOD' });
+      await repo.addFundamental(sql, { metric: 'stocks', region: 'ICE_US', value: 90, previous: 100, dataTime: new Date().toISOString(), source: 'ICE' });
+      await repo.addFundamental(sql, { metric: 'grindings', region: 'EU', value: 105, previous: 100, dataTime: new Date().toISOString(), source: 'ECA' });
+      r = await loadFundamentals(sql);
+      expect(r.score.coverage).toBe(3);
+      expect(r.score.bias).toBe('BULLISH');
+      expect((await repo.listAlerts(sql)).some(a => a.category === 'FUNDAMENTALS')).toBe(true);
+    } finally { globalThis.fetch = real; }
   });
 });

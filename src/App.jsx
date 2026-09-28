@@ -50,15 +50,16 @@ function Room({ onUnauthorized, onDbMissing }) {
   const intraday = usePolling(() => api.market('NY_COCOA', '1H'), 120e3);
   const fx = usePolling(api.fx, 6 * 3600e3);
   const st = usePolling(api.state, 60e3);
+  const fund = usePolling(api.fundamentals, 10 * 60e3);
 
   // any route answering 401 / 503 sends us back to the right gate
   useEffect(() => {
-    for (const e of [ny.error, st.error, fx.error]) {
+    for (const e of [ny.error, st.error, fx.error, fund.error]) {
       if (e?.status === 401) onUnauthorized();
       if (e?.code === 'DB_NOT_CONFIGURED') onDbMissing();
       if (e?.code === 'DB_UNREACHABLE') onDbMissing(e.message, e.body?.details);
     }
-  }, [ny.error, st.error, fx.error, onUnauthorized, onDbMissing]);
+  }, [ny.error, st.error, fx.error, fund.error, onUnauthorized, onDbMissing]);
 
   const market = ny.data;
   const daily = market?.candles?.length ? market.candles : null;
@@ -69,8 +70,9 @@ function Room({ onUnauthorized, onDbMissing }) {
   const lastVisit = useRef(undefined);
   if (lastVisit.current === undefined && st.data) lastVisit.current = st.data.lastVisit ?? null;
 
-  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote }), [daily, market?.quote]);
-  const war = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: false, confluence: false } }), [market, daily]);
+  const fundScore = fund.data?.score ?? null;
+  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore }), [daily, market?.quote, alerts, fundScore]);
+  const war = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction }), [market, daily, fundScore, trade?.product.direction]);
   const atr14 = useMemo(() => (daily ? atr(daily) : null), [daily]);
 
   const tradePrice = !trade ? null : trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market?.quote?.price ?? null;
@@ -157,6 +159,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   const shown = sheet || lastSheet.current;
 
   const ctx = {
+    fund,
     market, marketState: ny, intraday: intraday.data, daily, fx, pulse, war, atr14, trade, tradeState: st, mutate,
     position, tradePrice, eurPerUnit, alerts, lastVisit: lastVisit.current, go, openSheet: setSheet,
   };
@@ -176,7 +179,7 @@ function Room({ onUnauthorized, onDbMissing }) {
             <>
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}
-              {tab === 'fund' && <Fundamentals />}
+              {tab === 'fund' && <Fundamentals fund={fund} />}
               {tab === 'intel' && <Intel alerts={alerts} openSheet={setSheet} />}
               {tab === 'trade' && trade && <Trade {...ctx} />}
             </>

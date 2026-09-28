@@ -6,6 +6,8 @@ import { Sparkline } from '../components/Sparkline.jsx';
 import { StatusCore } from '../components/StatusCore.jsx';
 import { WhatChanged } from '../components/WhatChanged.jsx';
 import { MarketReading } from '../components/MarketReading.jsx';
+import { Thesis } from '../components/Thesis.jsx';
+import { BIAS } from './Fundamentals.jsx';
 import { Timeline } from '../components/Timeline.jsx';
 import { eur, money, num, pct } from '../lib/format.js';
 import { whatChanged } from '../../lib/engines/warroom.js';
@@ -15,12 +17,13 @@ const TEAM = [
   { name: 'Risk Manager', state: 'on', note: 'Position, risque au stop, règles d’entrée, alertes de risque' },
   { name: 'ICT / Technical Analyst', state: 'part', note: 'Niveaux et structure simplifiée · ICT en phase 6' },
   { name: 'News Analyst', state: 'off', note: 'Phase 3 · news et Telegram' },
-  { name: 'Weather Analyst', state: 'off', note: 'Phase 4 · météo, ENSO' },
-  { name: 'Agricultural / Supply Analyst', state: 'off', note: 'Phase 4 · production, stocks, arrivages' },
+  { name: 'Weather Analyst', state: 'on', note: 'Pluie des zones cacao vs normale, ENSO (Open-Meteo, NOAA)' },
+  { name: 'Positioning Analyst', state: 'on', note: 'Fonds et commerciaux, percentile sur 3 ans (CFTC)' },
+  { name: 'Agricultural / Supply Analyst', state: 'part', note: 'Production, stocks, arrivages, grindings : saisie avec source' },
   { name: 'AI Research Assistant', state: 'off', note: 'Phase 8 · synthèse, contradictions' },
 ];
 
-export function WarRoom({ market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
+export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
   const q = market?.quote;
   const up = (q?.changePct ?? 0) >= 0;
   const changes = whatChanged(lastVisit, { price: q?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null });
@@ -57,12 +60,16 @@ export function WarRoom({ market, marketState, intraday, daily, pulse, war, atr1
       </section>
 
       <StatusCore war={war} tiles={[
-        { k: 'Thèse', v: 'N/D' },
+        fund.data?.score && fund.data.score.bias !== 'INSUFFICIENT'
+          ? { k: 'Thèse', v: `${BIAS[fund.data.score.bias].label} ${fund.data.score.total > 0 ? '+' : ''}${fund.data.score.total}`, color: `var(--${{ up: 'ok', down: 'risk', warn: 'watch' }[BIAS[fund.data.score.bias].cls] || 'ink-2'})` }
+          : { k: 'Thèse', v: 'N/D' },
         { k: 'Timing', v: 'Attendre', color: 'var(--watch)' },
         { k: 'Confluence', v: 'N/D' },
       ]} />
 
       <WhatChanged lastVisit={lastVisit} changes={changes} />
+
+      <Thesis fund={fund} trade={trade} go={go} />
 
       <MarketReading daily={daily} quote={q} atr14={atr14} trade={trade} position={position} war={war} />
 

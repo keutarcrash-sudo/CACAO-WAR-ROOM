@@ -25,6 +25,9 @@ export const api = {
   ack: id => call('/api/state', { method: 'POST', body: { action: 'ack', id } }),
   trade: (action, payload = {}) => call('/api/trade', { method: 'POST', body: { action, ...payload } }),
   journal: () => call('/api/journal'),
+  fundamentals: () => call('/api/fundamentals'),
+  addFundamental: entry => call('/api/fundamentals', { method: 'POST', body: { action: 'add', ...entry } }),
+  deleteFundamental: id => call('/api/fundamentals', { method: 'POST', body: { action: 'delete', id } }),
   addNote: (answers, snapshot) => call('/api/journal', { method: 'POST', body: { answers, snapshot } }),
 };
 
