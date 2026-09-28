@@ -41,8 +41,18 @@ describe('research mission', () => {
   });
   it('classifies sources', () => {
     expect(sourceKind('https://www.icco.org/a')).toBe('official');
+    expect(sourceKind('https://www.eurococoa.com/x.pdf')).toBe('official');
+    expect(sourceKind('https://candyusa.com/x.pdf')).toBe('official');
     expect(sourceKind('https://bloomberg.com/a')).toBe('press');
     expect(sourceKind('https://blog.example/a')).toBe('other');
     expect(sourceKind('pas un lien')).toBe('invalid');
+  });
+
+  it('accepts typographic quotes pasted from a phone', () => {
+    const curly = '{\u201Ccocoa_war_room_data\u201D:[{\u201Cmetric\u201D:\u201Cgrindings\u201D,\u201Cregion\u201D:\u201CNA\u201D,\u201Cvalue\u201D:109659,\u201Cprevious\u201D:101865,\u201Curl\u201D:\u201Chttps://candyusa.com/q2.pdf\u201D,\u201Cquote\u201D:\u201CCocoa Beans Ground 109,659 101,865\u201D,\u201Cofficial\u201D:true}]}';
+    const [p] = checkProposals(extractPayload(curly), Date.parse('2026-09-28'));
+    expect(p.ok).toBe(true);
+    expect(p.official).toBe(true);
+    expect(p.change).toBeCloseTo(7.65, 1);
   });
 });
