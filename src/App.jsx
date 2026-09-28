@@ -93,7 +93,7 @@ function Room({ onUnauthorized, onDbMissing }) {
 
   const fundScore = fund.data?.score ?? null;
   const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore, confluenceOn: !!analysis.data?.setup, newsEvents: news.data?.events ?? null }), [daily, market?.quote, alerts, fundScore, news.data, analysis.data]);
-  const fallbackWar = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction }), [market, daily, fundScore, trade?.product.direction]);
+  const fallbackWar = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction, analysisError: analysis.error?.message ?? null }), [market, daily, fundScore, trade?.product.direction, analysis.error]);
   // the server reading (ICT + confluence + do-nothing rules) wins as soon as it is available
   const war = analysis.data?.setup ?? fallbackWar;
   const atr14 = useMemo(() => (daily ? atr(daily) : null), [daily]);
