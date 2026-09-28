@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { averagePrice, computePosition, checkEntry, DEFAULT_PLAN } from '../lib/engines/trade.js';
+import { averagePrice, computePosition, checkEntry, DEFAULT_PLAN, turboValue, knockedOut, underlyingForTurboPrice } from '../lib/engines/trade.js';
 
 const product = { kind: 'cfd', priceCurrency: 'GBP', pointValue: 1, direction: 'LONG' };
 const e1 = { n: 1, price: 4152, qty: 0.04, capitalEur: 30 };
@@ -87,5 +87,29 @@ describe('position sizing', () => {
     expect(withE1.room).toBeCloseTo(50 - 551 * 0.05 * 0.85, 6);
     expect(maxQuantity({ product, plan: DEFAULT_PLAN, stop: 5700, eurPerUnit: 0.85 }, 5662)).toBeNull();
     expect(maxQuantity({ product, plan: DEFAULT_PLAN, stop: null, eurPerUnit: 0.85 }, 5662)).toBeNull();
+  });
+});
+
+describe('turbo', () => {
+  const product = { kind: 'turbo', direction: 'LONG', strike: 4490, barrier: 4490, parity: 100, pointValue: 0.01, priceCurrency: 'USD' };
+  const eurPerUnit = 1 / 1.14;
+  it('values a Call turbo from the underlying and knows its barrier', () => {
+    expect(turboValue(product, 5630)).toBeCloseTo(11.4);
+    expect(turboValue(product, 4400)).toBe(0);
+    expect(knockedOut(product, 4490)).toBe(true);
+    expect(underlyingForTurboPrice(product, 10, eurPerUnit)).toBeCloseTo(4490 + 1140);
+  });
+  it('never loses more than what was paid, and is worth nothing past the barrier', () => {
+    const entries = [{ price: 5630, qty: 3, capitalEur: 30, feesEur: 0 }];
+    const p = computePosition({ entries, product, stop: 5100, price: 5300, eurPerUnit });
+    expect(p.pnl).toBeCloseTo(-330 * 3 * 0.01 / 1.14);
+    expect(p.lossAtStop).toBeCloseTo(530 * 3 * 0.01 / 1.14);
+    const ko = computePosition({ entries, product, stop: 5100, price: 4400, eurPerUnit });
+    expect(ko.knockedOut).toBe(true);
+    expect(ko.pnl).toBe(-30);
+  });
+  it('warns when the stop sits beyond the barrier', () => {
+    const c = checkEntry({ product, stop: 4300, eurPerUnit }, { price: 5630, qty: 3, capitalEur: 30 });
+    expect(c.warnings.join(' ')).toMatch(/barrière/);
   });
 });

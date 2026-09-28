@@ -100,7 +100,8 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
   for (const a of al) L.push(`- [${dt(a.at)}] ${a.level} · ${a.title}${a.message ? ` — ${a.message}` : ''}`);
 
   h('Position et plan');
-  L.push(`Produit : ${trade.product.kind === 'cfd' ? 'CFD / levier' : 'sans levier'}, sens ${trade.product.direction}, coté en ${cur}, valeur du point ${trade.product.pointValue}. Prix utilisé : ${trade.priceSource === 'manual' ? 'saisi à la main' : 'New York différé'}.`);
+  if (trade.product.kind === 'turbo') L.push(`Produit : turbo ${trade.product.direction === 'SHORT' ? 'Put' : 'Call'} ${trade.product.name || ''}${trade.product.isin ? ` (${trade.product.isin})` : ''}, prix d’exercice ${n(trade.product.strike)} $, barrière ${n(trade.product.barrier ?? trade.product.strike)} $, parité ${trade.product.parity}${trade.product.confirmed ? '' : ' (valeurs provisoires, non confirmées sur la fiche)'}. Perte limitée à la mise ; désactivé définitivement si la barrière est touchée.`);
+  else L.push(`Produit : ${trade.product.kind === 'cfd' ? 'CFD / levier' : 'sans levier'}, sens ${trade.product.direction}, coté en ${cur}, valeur du point ${trade.product.pointValue}. Prix utilisé : ${trade.priceSource === 'manual' ? 'saisi à la main' : 'New York différé'}.`);
   L.push(`Plan : budget ${trade.plan.plannedCapital} €, entrées ${trade.plan.split.join(' / ')} €, perte maximale ${trade.plan.maxLoss} €.`);
   const fxd = fx?.data;
   L.push(fxd?.raw ? `Taux BCE du ${fxd.date} : 1 € = ${n(fxd.raw.EURUSD, 4)} $ = ${n(fxd.raw.EURGBP, 4)} £. Perte en € pour 1 unité et 100 $ de distance au stop : ${n(100 * trade.product.pointValue * fxd.eurPer.USD, 2)} €.` : 'Taux de change : indisponible.');

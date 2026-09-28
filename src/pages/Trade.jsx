@@ -4,7 +4,8 @@ import { Freshness } from '../components/Freshness.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../lib/api.js';
 import { eur, money, num, pct, dateShort, hhmm } from '../lib/format.js';
-import { checkEntry, maxQuantity } from '../../lib/engines/trade.js';
+import { checkEntry, maxQuantity, isTurbo, turboValue, underlyingForTurboPrice } from '../../lib/engines/trade.js';
+import { atr } from '../../lib/engines/technical.js';
 import { SetupHistory } from '../components/SetupHistory.jsx';
 
 const parse = s => {
@@ -14,6 +15,7 @@ const parse = s => {
 };
 const today = () => new Date().toISOString().slice(0, 10);
 const SYM = { USD: '$', GBP: '£', EUR: '€' };
+const KIND = { cfd: 'CFD / levier', spot: 'sans levier', turbo: 'Turbo' };
 const flagClass = f => (f === 'VALID' || f === 'OK' ? 'up' : f === 'WARNING' ? 'warn' : 'down');
 
 // Runs a server action and exposes its pending state and error message.
@@ -32,7 +34,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
   return (
     <>
       <section className="glass surface-3 position-card trade-hero">
-        <p className="eyebrow">{trade.product.direction === 'SHORT' ? 'Short' : 'Long'} cacao · {trade.product.kind === 'cfd' ? 'CFD / levier' : 'sans levier'}</p>
+        <p className="eyebrow">{trade.product.direction === 'SHORT' ? 'Short' : 'Long'} cacao · {KIND[trade.product.kind]}{isTurbo(trade.product) ? ` ${trade.product.direction === 'SHORT' ? 'Put' : 'Call'} ${num(trade.product.strike)} $` : ''}</p>
         <div className="pos-top">
           <span className="pos-cap num">€{num(position.capital)}<span className="faint"> / €{trade.plan.plannedCapital}</span></span>
           <span className={`pos-pnl num ${position.pnl > 0 ? 'up' : position.pnl < 0 ? 'down' : 'faint'}`}>{position.pnl != null ? <Num value={position.pnl} format={x => eur(x, 2, true)} /> : '—'}</span>
@@ -52,7 +54,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
           <span className="row-side num big">{tradePrice != null ? <Num value={tradePrice} format={x => money(x, cur, 1)} /> : '—'}</span></li>
         <li><span className="row-main">Rendement<small>{position.roi != null ? `ROI ${pct(position.roi)}` : eurPerUnit == null && position.entriesCount ? 'taux de change indisponible' : '—'}</small></span>
           <span className="row-side num big">{position.rMultiple != null ? `${position.rMultiple >= 0 ? '+' : ''}${num(position.rMultiple, 2)} R` : '—'}</span></li>
-        <li><span className="row-main">Exposition<small>{num(position.qty, 3)} unités × prix</small></span><span className="row-side num big">{eur(position.exposure)}</span></li>
+        <li><span className="row-main">Exposition<small>{isTurbo(trade.product) ? `${num(position.qty)} turbos · équivalent ${num(position.qty / trade.product.parity, 2)} t` : `${num(position.qty, 3)} unités × prix`}</small></span><span className="row-side num big">{eur(position.exposure)}</span></li>
       </ul>
 
       <section className="glass surface-2 risk">
@@ -65,6 +67,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
         </dl>
       </section>
 
+      {isTurbo(trade.product) && <TurboOrders trade={trade} tradePrice={tradePrice} eurPerUnit={eurPerUnit} market={market} position={position} />}
       <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
       <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} tradePrice={tradePrice} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
@@ -73,6 +76,53 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
       <DataTools trade={trade} mutate={mutate} />
       <p className="foot">Données enregistrées dans ta base Supabase. L’app ne passe aucun ordre.</p>
     </>
+  );
+}
+
+// Turbo: what each cocoa level means in turbo price, i.e. what to type in the broker's orders.
+// Estimates from the delayed New York price and the ECB rate; the broker's quote is what executes.
+function TurboOrders({ trade, tradePrice, eurPerUnit, market, position }) {
+  const p = trade.product;
+  const next = trade.entries.length < 3 ? trade.plan.split[trade.entries.length] : null;
+  const [level, setLevel] = useState('');
+  const a = market?.candles?.length ? atr(market.candles) : null;
+  const barrier = p.barrier ?? p.strike;
+  const at = lv => (lv == null || eurPerUnit == null ? null : turboValue(p, lv) * eurPerUnit);
+  const now = at(tradePrice);
+  const dist = tradePrice != null ? (tradePrice - barrier) * (p.direction === 'SHORT' ? -1 : 1) : null;
+  const lv = parse(level) ?? tradePrice;
+  const buy = at(lv);
+  const qty = buy > 0 && next ? Math.floor(next / buy) : null;
+  const size = trade.stop != null ? maxQuantity({ entries: trade.entries, plan: trade.plan, product: p, stop: trade.stop, eurPerUnit }, lv) : null;
+  const atStop = at(trade.stop);
+  const lossAtStop = qty && buy != null && atStop != null ? qty * (buy - atStop) : null;
+  const age = p.strikeAt ? Math.floor((Date.now() - p.strikeAt) / 86400e3) : null;
+  return (
+    <section>
+      <header className="section-head"><h2>Ordres BoursoBank</h2><span className="meta">{p.name || 'turbo'}{p.isin ? ` · ${p.isin}` : ''}</span></header>
+      {!p.confirmed && <p className="msg warn">Valeurs provisoires : confirme la parité, la barrière et le prix d’exercice sur la fiche du turbo, puis coche « confirmé » dans Produit et plan.</p>}
+      <ul className="rows">
+        <li><span className="row-main">Valeur estimée du turbo<small>au cours New York différé · compare au prix BoursoBank</small></span><span className="row-side num big">{now != null ? `${num(now, 2)} €` : '—'}</span></li>
+        <li><span className="row-main">Barrière {num(barrier)} $<small>{dist != null ? `à ${num(dist)} $ (${num(dist / tradePrice * 100, 1)} %)${a ? ` · ${num(dist / a, 1)} ATR` : ''}` : '—'} · touchée = turbo à 0, définitivement</small></span>
+          <span className={`row-side num ${dist != null && a && dist < 2 * a ? 'down' : ''}`}>{dist != null && a ? (dist < a ? 'danger' : dist < 2 * a ? 'proche' : 'loin') : ''}</span></li>
+      </ul>
+      <div className="glass surface-2 add-entry">
+        <p className="eyebrow">Calculer un ordre d’achat</p>
+        <div className="form-grid">
+          <Field id="t-level" label="Niveau du cacao visé" value={level} onChange={setLevel} placeholder={tradePrice != null ? String(Math.round(tradePrice)) : ''} suffix="$" />
+        </div>
+        <ul className="rows">
+          <li><span className="row-main">Prix limite à saisir<small>ordre d’achat à cours limité sur le turbo</small></span><span className="row-side num big">{buy != null ? `${num(buy, 2)} €` : '—'}</span></li>
+          {next && <li><span className="row-main">Quantité pour l’entrée {trade.entries.length + 1} (€{next})<small>{size ? `maximum ${Math.floor(size.qty)} turbos pour rester sous €${trade.plan.maxLoss} au stop` : trade.stop == null ? 'fixe ton stop pour vérifier le risque' : ''}</small></span><span className="row-side num big">{qty == null ? '—' : qty === 0 ? <small className="warn">1 turbo &gt; €{next}</small> : `${qty} turbos`}</span></li>}
+          {trade.stop != null && <li><span className="row-main">Ordre stop à saisir<small>niveau d’invalidation {num(trade.stop)} $ · perte ≈ {lossAtStop != null ? `${num(lossAtStop, 2)} €` : '—'} sur cette entrée</small></span><span className="row-side num big">{atStop != null ? `${num(atStop, 2)} €` : '—'}</span></li>}
+          {trade.targets.map((t, i) => <li key={t}><span className="row-main">Vente à l’objectif {i + 1}<small>{num(t)} $ · ordre de vente à cours limité</small></span><span className="row-side num">{at(t) != null ? `${num(at(t), 2)} €` : '—'}</span></li>)}
+        </ul>
+      </div>
+      <p className="fine">
+        Estimations : cours New York différé, taux BCE du jour, sans l’écart achat/vente de l’émetteur. Le prix d’exercice monte un peu chaque jour (financement){age != null ? ` : saisi il y a ${age} jour${age > 1 ? 's' : ''}` : ''}. Si la valeur estimée s’écarte de plus de 3 % du prix BoursoBank, mets à jour le prix d’exercice.
+        {position.entriesCount > 0 && position.knockedOut ? ' Ce turbo a touché sa barrière.' : ''}
+      </p>
+    </section>
   );
 }
 
@@ -120,11 +170,16 @@ function Levels({ trade, mutate, position, cur }) {
 function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
   const n = trade.entries.length + 1;
   const planned = trade.plan.split[n - 1];
-  const [form, setForm] = useState({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() });
+  const [form, setForm] = useState({ price: '', qty: '', capitalEur: '', feesEur: '', date: today(), turboEur: '' });
   const [override, setOverride] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
   const act = useAction(mutate);
-  const cand = { price: parse(form.price), qty: parse(form.qty), capitalEur: parse(form.capitalEur) ?? planned ?? 0, feesEur: parse(form.feesEur) ?? 0 };
+  const turbo = isTurbo(trade.product);
+  // a turbo is entered with its own price (€) and a number of turbos; the cocoa level it stands for is derived
+  const tEur = parse(form.turboEur);
+  const cand = turbo
+    ? { price: tEur != null ? underlyingForTurboPrice(trade.product, tEur, eurPerUnit) : null, qty: parse(form.qty), capitalEur: tEur != null && parse(form.qty) != null ? Math.round(tEur * parse(form.qty) * 100) / 100 : 0, feesEur: parse(form.feesEur) ?? 0 }
+    : { price: parse(form.price), qty: parse(form.qty), capitalEur: parse(form.capitalEur) ?? planned ?? 0, feesEur: parse(form.feesEur) ?? 0 };
   const filled = cand.price != null && cand.qty != null;
   // live feedback, the server applies the same rules again when saving
   const check = useMemo(() => (filled ? checkEntry({ entries: trade.entries, plan: trade.plan, product: trade.product, stop: trade.stop, eurPerUnit }, cand) : null),
@@ -138,7 +193,7 @@ function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
   const add = async () => {
     try {
       await act.run('addEntry', { ...cand, date: form.date, override: check && !check.ok ? override : false });
-      setForm({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() }); setOverride(false);
+      setForm({ price: '', qty: '', capitalEur: '', feesEur: '', date: today(), turboEur: '' }); setOverride(false);
     } catch { /* shown by useAction */ }
   };
 
@@ -149,7 +204,7 @@ function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
         {trade.entries.map(e => (
           <li key={e.id}>
             <span className="entry-n">E{e.n}</span>
-            <span className="row-main num">{money(e.price, cur, 1)} · {num(e.qty, 3)} u.<small>{dateShort(Date.parse(e.date))} · €{num(e.capitalEur)}{e.feesEur ? ` · frais €${num(e.feesEur, 2)}` : ''}{e.offRules ? ' · hors règles' : ''}</small></span>
+            <span className="row-main num">{turbo ? `${num(e.qty)} turbos à ${num(e.capitalEur / e.qty, 2)} € · cacao ${money(e.price, cur)}` : `${money(e.price, cur, 1)} · ${num(e.qty, 3)} u.`}<small>{dateShort(Date.parse(e.date))} · €{num(e.capitalEur)}{e.feesEur ? ` · frais €${num(e.feesEur, 2)}` : ''}{e.offRules ? ' · hors règles' : ''}</small></span>
             {confirmDel === e.id
               ? <span className="row-actions"><button className="link down" onClick={() => act.run('deleteEntry', { id: e.id }).catch(() => {}).finally(() => setConfirmDel(null))}>Supprimer</button><button className="link" onClick={() => setConfirmDel(null)}>Annuler</button></span>
               : <button className="link faint" onClick={() => setConfirmDel(e.id)} aria-label={`Retirer l’entrée ${e.n}`}>Retirer</button>}
@@ -159,6 +214,15 @@ function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
       {trade.closed ? <p className="empty">Position clôturée. Ouvre une nouvelle position dans « Données ».</p> : n <= 3 ? (
         <div className="glass surface-2 add-entry">
           <p className="eyebrow">Enregistrer l’entrée {n} · plan €{planned}</p>
+          {turbo ? (
+            <div className="form-grid">
+              <Field id="e-teur" label="Prix payé par turbo" value={form.turboEur} onChange={v => setForm({ ...form, turboEur: v })} placeholder="ex. 10,10" suffix="€" />
+              <Field id="e-qty" label="Nombre de turbos" value={form.qty} onChange={v => setForm({ ...form, qty: v })} placeholder="ex. 3" />
+              <Field id="e-fees" label="Frais" value={form.feesEur} onChange={v => setForm({ ...form, feesEur: v })} placeholder="0" suffix="€" />
+              <Field id="e-date" label="Date" type="date" value={form.date} onChange={v => setForm({ ...form, date: v })} />
+              {cand.price != null && <p className="fine">Soit €{num(cand.capitalEur, 2)} engagés, et un cacao équivalent à {num(cand.price)} $.</p>}
+            </div>
+          ) : (
           <div className="form-grid">
             <Field id="e-price" label="Prix d’exécution" value={form.price} onChange={v => setForm({ ...form, price: v })} suffix={SYM[cur]} />
             <Field id="e-qty" label="Quantité" value={form.qty} onChange={v => setForm({ ...form, qty: v })} placeholder="ex. 0,04" suffix="u." />
@@ -166,15 +230,16 @@ function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
             <Field id="e-fees" label="Frais" value={form.feesEur} onChange={v => setForm({ ...form, feesEur: v })} placeholder="0" suffix="€" />
             <Field id="e-date" label="Date" type="date" value={form.date} onChange={v => setForm({ ...form, date: v })} />
           </div>
+          )}
           <div className="sizing">
             {trade.stop == null ? <p className="msg note">Définis d’abord ton stop : la taille maximale en dépend.</p>
               : eurPerUnit == null ? <p className="msg note">Taux de change indisponible : taille maximale non calculable.</p>
               : !size ? <p className="msg warn">Au prix {sizeAt != null ? money(sizeAt, cur) : '—'}, ton stop n’est pas du bon côté : aucune taille possible.</p>
               : (
                 <p className="msg note">
-                  Taille maximale à {money(sizeAt, cur)} : <b className="num">{num(Math.floor(size.qty * 1000) / 1000, 3)} u.</b> pour rester sous €{trade.plan.maxLoss} de perte au stop
+                  Taille maximale à {money(sizeAt, cur)} : <b className="num">{turbo ? `${Math.floor(size.qty)} turbos` : `${num(Math.floor(size.qty * 1000) / 1000, 3)} u.`}</b> pour rester sous €{trade.plan.maxLoss} de perte au stop
                   {' '}(reste €{num(size.room, 2)} de risque · €{num(size.perUnit, 2)} par unité).
-                  {size.qty > 0 && <button className="link" onClick={() => setForm({ ...form, qty: String(Math.floor(size.qty * 1000) / 1000).replace('.', ',') })}>Utiliser</button>}
+                  {size.qty > 0 && <button className="link" onClick={() => setForm({ ...form, qty: turbo ? String(Math.floor(size.qty)) : String(Math.floor(size.qty * 1000) / 1000).replace('.', ',') })}>Utiliser</button>}
                 </p>
               )}
           </div>
@@ -260,15 +325,32 @@ function Settings({ trade, mutate, fx }) {
   const act = useAction(mutate);
   const p = trade.product;
   const save = patch => act.run('settings', patch).catch(() => {});
+  const [tb, setTb] = useState({ name: p.name ?? '', isin: p.isin ?? '', strike: p.strike ?? '', barrier: p.barrier ?? '', parity: p.parity ?? 100, confirmed: !!p.confirmed });
   return (
     <section>
       <header className="section-head"><h2>Produit et plan</h2><button className="link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Masquer' : 'Modifier'}</button></header>
-      <p className="empty">{p.kind === 'cfd' ? 'CFD' : 'Sans levier'} · {p.direction} · coté en {p.priceCurrency} · 1 point × 1 unité = {p.pointValue} {p.priceCurrency} · prix {trade.priceSource === 'manual' ? 'saisi à la main' : 'New York (auto, différé)'}</p>
+      <p className="empty">{KIND[p.kind]}{isTurbo(p) ? ` ${p.name || ''} · prix d’exercice ${num(p.strike)} $ · parité ${p.parity}${p.confirmed ? '' : ' (provisoire)'}` : ''} · {p.direction} · coté en {p.priceCurrency} · 1 point × 1 unité = {p.pointValue} {p.priceCurrency} · prix {trade.priceSource === 'manual' ? 'saisi à la main' : 'New York (auto, différé)'}</p>
       {open && (
         <div className="glass surface-2 settings">
           <Seg label="Sens" value={p.direction} options={[['LONG', 'Long'], ['SHORT', 'Short']]} onChange={v => save({ product: { direction: v } })} />
-          <Seg label="Type de produit" value={p.kind} options={[['cfd', 'CFD / levier'], ['spot', 'Sans levier']]} onChange={v => save({ product: { kind: v } })} />
-          <Seg label="Devise de cotation" value={p.priceCurrency} options={[['USD', '$ USD'], ['GBP', '£ GBP'], ['EUR', '€ EUR']]} onChange={v => save({ product: { priceCurrency: v } })} />
+          <Seg label="Type de produit" value={p.kind} options={[['turbo', 'Turbo'], ['cfd', 'CFD / levier'], ['spot', 'Sans levier']]} onChange={v => save({ product: v === 'turbo' ? { kind: v, strike: p.strike ?? 4490.51, barrier: p.barrier ?? 4490.51, parity: p.parity ?? 100, name: p.name || 'Turbo Call SG Cocoa 4 490', direction: 'LONG' } : { kind: v } })} />
+          {isTurbo(p) && (
+            <>
+              <div className="form-grid">
+                <Field id="t-name" label="Nom" value={tb.name} onChange={v => setTb({ ...tb, name: v })} placeholder="Turbo Call SG Cocoa" />
+                <Field id="t-isin" label="ISIN" value={tb.isin} onChange={v => setTb({ ...tb, isin: v })} placeholder="FR00…" />
+                <Field id="t-strike" label="Prix d’exercice actuel" value={tb.strike} onChange={v => setTb({ ...tb, strike: v })} suffix="$" />
+                <Field id="t-barrier" label="Barrière" value={tb.barrier} onChange={v => setTb({ ...tb, barrier: v })} suffix="$" />
+                <Field id="t-parity" label="Parité" value={tb.parity} onChange={v => setTb({ ...tb, parity: v })} placeholder="100" />
+              </div>
+              <label className="override" htmlFor="t-conf">
+                <input id="t-conf" type="checkbox" checked={tb.confirmed} onChange={e => setTb({ ...tb, confirmed: e.target.checked })} />
+                <span>Ces valeurs sont confirmées sur la fiche du turbo.</span>
+              </label>
+              <button className="btn" disabled={act.busy} onClick={() => save({ product: { ...tb, strike: parse(tb.strike), barrier: parse(tb.barrier), parity: parse(tb.parity) } })}>Enregistrer le turbo</button>
+            </>
+          )}
+          {!isTurbo(p) && <Seg label="Devise de cotation" value={p.priceCurrency} options={[['USD', '$ USD'], ['GBP', '£ GBP'], ['EUR', '€ EUR']]} onChange={v => save({ product: { priceCurrency: v } })} />}
           <Seg label="Prix actuel" value={trade.priceSource} options={[['NY_COCOA', 'New York auto'], ['manual', 'Saisi à la main']]} onChange={v => save({ priceSource: v })} disabled={p.priceCurrency !== 'USD' ? ['NY_COCOA'] : []} />
           {trade.priceSource === 'manual' && (
             <div className="form-grid">
@@ -277,11 +359,11 @@ function Settings({ trade, mutate, fx }) {
             </div>
           )}
           <div className="form-grid">
-            <Field id="pv" label="Valeur du point" value={pv} onChange={setPv} />
+            {!isTurbo(p) && <Field id="pv" label="Valeur du point" value={pv} onChange={setPv} />}
             <Field id="budget" label="Budget maximum" value={budget} onChange={setBudget} suffix="€" />
             <Field id="maxloss" label="Perte maximale" value={maxLoss} onChange={setMaxLoss} suffix="€" />
           </div>
-          <button className="btn" disabled={act.busy} onClick={() => save({ product: { pointValue: parse(pv) }, plan: { plannedCapital: parse(budget), maxLoss: parse(maxLoss) } })}>Enregistrer le plan</button>
+          <button className="btn" disabled={act.busy} onClick={() => save({ product: isTurbo(p) ? {} : { pointValue: parse(pv) }, plan: { plannedCapital: parse(budget), maxLoss: parse(maxLoss) } })}>Enregistrer le plan</button>
           {act.error && <p className="msg bad">{act.error}</p>}
           <p className="fine">Taux BCE {fx.data?.date ? `du ${fx.data.date}` : 'indisponible'} : 1 € = {num(fx.data?.raw?.EURUSD, 4)} $ · {num(fx.data?.raw?.EURGBP, 4)} £. Pour un CFD cacao coté par tonne, la valeur du point vaut en général 1 et la quantité est en tonnes : vérifie la fiche du produit chez ton courtier.</p>
         </div>
