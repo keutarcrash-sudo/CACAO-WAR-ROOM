@@ -29,7 +29,7 @@ function useAction(mutate) {
   return { run, busy, error, setError };
 }
 
-export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, fx, pulse }) {
+export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, fx, pulse, analysis }) {
   const cur = trade.product.priceCurrency;
   return (
     <>
@@ -68,6 +68,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
       </section>
 
       {isTurbo(trade.product) && <TurboOrders trade={trade} tradePrice={tradePrice} eurPerUnit={eurPerUnit} market={market} position={position} />}
+      {analysis?.data?.reinforce && <Reinforce r={analysis.data.reinforce} turbo={isTurbo(trade.product)} />}
       <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
       <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} tradePrice={tradePrice} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
@@ -122,6 +123,27 @@ function TurboOrders({ trade, tradePrice, eurPerUnit, market, position }) {
         Estimations : cours New York différé, taux BCE du jour, sans l’écart achat/vente de l’émetteur. Le prix d’exercice monte un peu chaque jour (financement){age != null ? ` : saisi il y a ${age} jour${age > 1 ? 's' : ''}` : ''}. Si la valeur estimée s’écarte de plus de 3 % du prix BoursoBank, mets à jour le prix d’exercice.
         {position.entriesCount > 0 && position.knockedOut ? ' Ce turbo a touché sa barrière.' : ''}
       </p>
+    </section>
+  );
+}
+
+// E2 / E3 conditions, all visible: the entry is allowed only when every line is checked.
+function Reinforce({ r, turbo }) {
+  return (
+    <section>
+      <header className="section-head"><h2>Renfort E{r.n}</h2><span className={`meta ${r.ok ? 'up' : ''}`}>{r.ok ? 'possible' : 'pas maintenant'}</span></header>
+      <ul className="rows">
+        {r.checks.map(c => (
+          <li key={c.k}><span className="row-main">{c.ok ? '✓' : '✕'} {c.label}<small>{c.detail}</small></span></li>
+        ))}
+      </ul>
+      {r.ok && (
+        <p className="msg ok">
+          {turbo && r.unitEur != null ? `${r.qty} turbos à environ ${num(r.unitEur, 2)} € (€${r.amount}).` : `Taille maximale ${r.qty} u.`}
+          {r.stopNeeded != null ? ` D’abord, remonte ton stop à ${num(r.stopNeeded)} $ (et ton ordre stop BoursoBank).` : ''} Rien ne t’oblige à renforcer.
+        </p>
+      )}
+      <p className="fine">Jamais sur une baisse : il faut que le marché t’ait déjà donné raison. Seuils : {`0,5 ATR de gain`}, nouvelle cassure dans ton sens (Daily, 4H ou 1H) ou haute confluence, risque total sous ta perte maximale.</p>
     </section>
   );
 }
