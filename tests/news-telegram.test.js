@@ -52,8 +52,8 @@ describe('telegram anti-spam', () => {
   });
   it('writes readable messages and escapes HTML', () => {
     expect(alertMessage({ level: 'CRITICAL', title: 'A <b> & B', importance: 80, category: 'NEWS', source: 'x' })).toContain('A &lt;b&gt; &amp; B');
-    const s = statusMessage({ quote: { price: 5619, changePct: -1.2 }, fund: { bias: 'BULLISH', total: 7 }, war: { doNothing: true, reasons: [{ t: 'Rien' }] }, position: { capital: 0, pnl: null, avg: null, lossAtStop: null }, trade: { plan: { plannedCapital: 150, maxLoss: 50 } } });
+    const s = statusMessage({ quote: { price: 5619, changePct: -1.2 }, fund: { bias: 'BULLISH', total: 7 }, war: { doNothing: true, status: 'NO_SETUP', score: 3, reasons: [{ t: 'Rien' }] }, position: { capital: 0, pnl: null, avg: null, lossAtStop: null }, trade: { plan: { plannedCapital: 150, maxLoss: 50 } } });
     expect(s).toContain('$5,619');
-    expect(s).toContain('RIEN À FAIRE');
+    expect(s).toContain('rien à faire');
   });
 });

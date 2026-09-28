@@ -80,6 +80,33 @@ export function drawStory(ctx, W, H, m, A, reveal = 1) {
     ctx.restore();
   }
 
+  // ICT zones (FVG, order blocks) and events (sweeps, BOS / CHoCH)
+  if (A.ict > 0.01) {
+    ctx.save(); ctx.globalAlpha = A.ict;
+    for (const z of m.zones || []) {
+      const x = Math.max(pad.l, X(z.x) - step / 2), y1 = Y(z.top), y2 = Y(z.bottom);
+      const col = z.dir === 'BULLISH' ? C.data : C.risk;
+      ctx.fillStyle = rgba(col, z.kind === 'OB' ? 0.1 : 0.14);
+      ctx.fillRect(x, y1, W - pad.r - x, Math.max(2, y2 - y1));
+      ctx.strokeStyle = rgba(col, 0.55); ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y1 + 0.5, W - pad.r - x - 1, Math.max(1, y2 - y1 - 1));
+      ctx.fillStyle = rgba(col, 1); ctx.textAlign = 'left';
+      ctx.fillText(`${z.kind} ${z.tf}`, x + 4, (y1 + y2) / 2);
+    }
+    for (const mk of m.marks || []) {
+      const x = X(mk.x), y = Y(mk.price), up = mk.dir === 'BULLISH';
+      const col = mk.kind === 'sweep' ? C.data : C.struct;
+      ctx.fillStyle = rgba(col, 1);
+      ctx.beginPath();
+      if (up) { ctx.moveTo(x, y + 6); ctx.lineTo(x - 4, y + 13); ctx.lineTo(x + 4, y + 13); }
+      else { ctx.moveTo(x, y - 6); ctx.lineTo(x - 4, y - 13); ctx.lineTo(x + 4, y - 13); }
+      ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.fillText(mk.label, x, Math.min(H - 6, Math.max(10, up ? y + 22 : y - 20)));
+    }
+    ctx.restore();
+  }
+
   // estimated liquidity
   if (m.lv) {
     const px = ks.at(-1).c;

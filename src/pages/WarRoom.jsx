@@ -7,15 +7,24 @@ import { StatusCore } from '../components/StatusCore.jsx';
 import { WhatChanged } from '../components/WhatChanged.jsx';
 import { MarketReading } from '../components/MarketReading.jsx';
 import { Thesis } from '../components/Thesis.jsx';
+import { ConfluenceCard } from '../components/Confluence.jsx';
 import { BIAS } from './Fundamentals.jsx';
 import { Timeline } from '../components/Timeline.jsx';
 import { eur, money, num, pct } from '../lib/format.js';
 import { whatChanged } from '../../lib/engines/warroom.js';
 
+const TIMING = {
+  NO_SETUP: { k: 'Timing', v: 'Attendre', color: 'var(--watch)' },
+  WATCHING: { k: 'Timing', v: 'Surveiller', color: 'var(--watch)' },
+  DEVELOPING: { k: 'Timing', v: 'Confirmation ?', color: 'var(--dev)' },
+  HIGH: { k: 'Timing', v: 'Confirmé', color: 'var(--ok)' },
+  INVALIDATED: { k: 'Timing', v: 'Invalidé', color: 'var(--risk)' },
+};
+
 const TEAM = [
   { name: 'Market Analyst', state: 'on', note: 'Prix New York différé, historique, ATR' },
   { name: 'Risk Manager', state: 'on', note: 'Position, risque au stop, règles d’entrée, alertes Telegram' },
-  { name: 'ICT / Technical Analyst', state: 'part', note: 'Niveaux et structure simplifiée · ICT en phase 6' },
+  { name: 'ICT / Technical Analyst', state: 'on', note: 'Sweeps, BOS / CHoCH, FVG, order blocks, displacement, confluence sur 15' },
   { name: 'News Analyst', state: 'part', note: 'Google News dédoublonné, classement par mots-clés · IA à venir' },
   { name: 'Weather Analyst', state: 'on', note: 'Pluie des zones cacao vs normale, ENSO (Open-Meteo, NOAA)' },
   { name: 'Positioning Analyst', state: 'on', note: 'Fonds et commerciaux, percentile sur 3 ans (CFTC)' },
@@ -23,7 +32,7 @@ const TEAM = [
   { name: 'AI Research Assistant', state: 'part', note: 'Brief gratuit à coller dans l’IA de ton choix' },
 ];
 
-export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
+export function WarRoom({ fund, analysis, market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
   const q = market?.quote;
   const up = (q?.changePct ?? 0) >= 0;
   const changes = whatChanged(lastVisit, { price: q?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null });
@@ -63,9 +72,11 @@ export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war
         fund.data?.score && fund.data.score.bias !== 'INSUFFICIENT'
           ? { k: 'Thèse', v: `${BIAS[fund.data.score.bias].label} ${fund.data.score.total > 0 ? '+' : ''}${fund.data.score.total}`, color: `var(--${{ up: 'ok', down: 'risk', warn: 'watch' }[BIAS[fund.data.score.bias].cls] || 'ink-2'})` }
           : { k: 'Thèse', v: 'N/D' },
-        { k: 'Timing', v: 'Attendre', color: 'var(--watch)' },
-        { k: 'Confluence', v: 'N/D' },
+        TIMING[war.status] || TIMING.NO_SETUP,
+        { k: 'Confluence', v: war.score != null ? `${war.score} / 15` : 'N/D' },
       ]} />
+
+      <ConfluenceCard conf={trade.product.direction === 'SHORT' ? analysis.data?.short : analysis.data?.long} onOpen={() => openSheet({ type: 'confluence' })} />
 
       <button className="glass surface-2 brief-cta tappable" onClick={() => openSheet({ type: 'brief' })}>
         <span className="brief-ico" aria-hidden="true">✦</span>
@@ -77,7 +88,7 @@ export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war
 
       <Thesis fund={fund} trade={trade} go={go} />
 
-      <MarketReading daily={daily} quote={q} atr14={atr14} trade={trade} position={position} war={war} />
+      <MarketReading daily={daily} quote={q} atr14={atr14} trade={trade} position={position} war={war} analysis={analysis.data} />
 
       <section>
         <header className="section-head"><h2>Position</h2><span className="meta">{position.status}</span></header>

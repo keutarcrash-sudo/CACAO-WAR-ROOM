@@ -1,16 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, LineStyle } from 'lightweight-charts';
+import { createChart, CandlestickSeries, LineStyle, createSeriesMarkers } from 'lightweight-charts';
 
 const COLORS = {
   text: '#6D7786', grid: 'rgba(160,185,215,0.06)', up: 'rgba(76,195,138,0.85)', down: 'rgba(229,87,79,0.8)',
 };
 
 // Candles + horizontal levels. Levels fade in/out by being added or removed as a group.
-export function Chart({ candles, levels = [], height = 320 }) {
+export function Chart({ candles, levels = [], markers = [], height = 320 }) {
   const box = useRef(null);
   const chart = useRef(null);
   const series = useRef(null);
   const lines = useRef([]);
+  const marks = useRef(null);
 
   useEffect(() => {
     const c = createChart(box.current, {
@@ -30,8 +31,9 @@ export function Chart({ candles, levels = [], height = 320 }) {
       priceLineColor: '#62C6DE', priceLineStyle: LineStyle.Dotted,
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
     });
+    marks.current = createSeriesMarkers(series.current, []);
     chart.current = c;
-    return () => { c.remove(); chart.current = null; series.current = null; lines.current = []; };
+    return () => { c.remove(); chart.current = null; series.current = null; lines.current = []; marks.current = null; };
   }, [height]);
 
   useEffect(() => {
@@ -48,6 +50,13 @@ export function Chart({ candles, levels = [], height = 320 }) {
       price: l.price, color: l.color, lineWidth: 1, lineStyle: l.style ?? LineStyle.Dashed, axisLabelVisible: true, title: l.title,
     }));
   }, [levels, candles]);
+
+  useEffect(() => {
+    if (!marks.current || !candles?.length) return;
+    // markers must sit on an existing bar time and be sorted
+    const times = new Set(candles.map(k => k.t));
+    marks.current.setMarkers(markers.filter(m => times.has(m.time)).sort((a, b) => a.time - b.time));
+  }, [markers, candles]);
 
   return <div ref={box} className="chart-box" style={{ height }} />;
 }

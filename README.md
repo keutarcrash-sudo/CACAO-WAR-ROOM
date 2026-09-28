@@ -4,7 +4,7 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 
 > Un système qui surveille tout ce qui peut faire évoluer la thèse, et qui indique quand plusieurs éléments convergent, ou quand il vaut mieux **ne rien faire**.
 
-## Version 0.3 : ce qui marche
+## Version 0.4 : ce qui marche
 
 | Module | État |
 |---|---|
@@ -25,7 +25,9 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 | News | ✅ Google News, doublons regroupés, catégorie et importance par mots-clés (confiance faible) |
 | Telegram | ✅ Alertes critiques seulement, anti-spam, mode silencieux, commandes /status /position /fundamental /news /alerts |
 | Surveillance continue | ✅ Tâche Supabase toutes les 5 minutes, activée depuis l'onglet Intelligence |
-| ICT, confluence, analyse IA | ⏳ Phases suivantes |
+| ICT / SMC | ✅ Par unité de temps (W1 → 15M) : BOS / CHoCH, sweeps, equal highs / lows, FVG, order blocks, displacement, rejets, volume inhabituel. Règles sur les bougies, sans IA |
+| Confluence et statut | ✅ Score sur 15 (long et short) avec preuves, règles « rien à faire », statut Aucun setup / Surveillance / En formation / Haute confluence / Invalidé, alerte Telegram sur haute confluence |
+| Analyse IA | ✅ Gratuite : brief complet à copier dans l'IA de ton choix, réponse rangée dans le journal |
 
 Tant que la confluence et les fondamentaux ne sont pas branchés, la War Room affiche **« Aucun setup · Rien à faire »** avec ses raisons. C'est voulu.
 

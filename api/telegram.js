@@ -5,7 +5,8 @@ import { statusMessage, listMessage, HELP } from '../lib/telegram/messages.js';
 import { marketWithEvents, getRates } from '../lib/services/market.js';
 import { loadFundamentals } from '../lib/services/fundamentals.js';
 import { computePosition } from '../lib/engines/trade.js';
-import { evaluateWarRoom } from '../lib/engines/warroom.js';
+import { runAnalysis } from '../lib/services/analysis.js';
+import { cached } from '../lib/http/respond.js';
 import { guarded, query, readJson, send } from '../lib/http/respond.js';
 import { isAuthenticated } from '../lib/auth/session.js';
 
@@ -17,7 +18,7 @@ async function snapshot(sql) {
   ]);
   const price = trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market.quote?.price ?? null;
   const position = computePosition({ ...trade, price, eurPerUnit: fx?.eurPer?.[trade.product.priceCurrency] ?? null });
-  const war = evaluateWarRoom({ market, daily: market.candles, modules: { fundamentals: !!fund, confluence: false }, fundamentals: fund?.score, direction: trade.product.direction });
+  const war = (await cached('analysis', 60e3, () => runAnalysis(sql, { fund }))).setup;
   return { market, fund, trade, position, war };
 }
 

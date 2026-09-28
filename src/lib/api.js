@@ -26,6 +26,7 @@ export const api = {
   trade: (action, payload = {}) => call('/api/trade', { method: 'POST', body: { action, ...payload } }),
   journal: () => call('/api/journal'),
   fundamentals: () => call('/api/fundamentals'),
+  analysis: () => call('/api/analysis'),
   news: (refresh = false) => call(`/api/news${refresh ? '?refresh=1' : ''}`),
   telegram: (action = 'status') => call(`/api/telegram?action=${action}`),
   monitor: (action = 'status') => call(`/api/cron?action=${action}`),

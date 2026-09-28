@@ -13,6 +13,7 @@ import { Market } from './pages/Market.jsx';
 import { Fundamentals } from './pages/Fundamentals.jsx';
 import { Intel, NewsDetail } from './pages/Intel.jsx';
 import { BriefSheet } from './components/BriefSheet.jsx';
+import { ConfluenceDetail } from './components/Confluence.jsx';
 import { Trade } from './pages/Trade.jsx';
 import { usePolling } from './hooks/usePolling.js';
 import { useLongPress } from './hooks/useLongPress.js';
@@ -53,15 +54,16 @@ function Room({ onUnauthorized, onDbMissing }) {
   const st = usePolling(api.state, 60e3);
   const fund = usePolling(api.fundamentals, 10 * 60e3);
   const news = usePolling(() => api.news(), 10 * 60e3);
+  const analysis = usePolling(api.analysis, 2 * 60e3);
 
   // any route answering 401 / 503 sends us back to the right gate
   useEffect(() => {
-    for (const e of [ny.error, st.error, fx.error, fund.error]) {
+    for (const e of [ny.error, st.error, fx.error, fund.error, analysis.error]) {
       if (e?.status === 401) onUnauthorized();
       if (e?.code === 'DB_NOT_CONFIGURED') onDbMissing();
       if (e?.code === 'DB_UNREACHABLE') onDbMissing(e.message, e.body?.details);
     }
-  }, [ny.error, st.error, fx.error, fund.error, onUnauthorized, onDbMissing]);
+  }, [ny.error, st.error, fx.error, fund.error, analysis.error, onUnauthorized, onDbMissing]);
 
   const market = ny.data;
   const daily = market?.candles?.length ? market.candles : null;
@@ -73,8 +75,10 @@ function Room({ onUnauthorized, onDbMissing }) {
   if (lastVisit.current === undefined && st.data) lastVisit.current = st.data.lastVisit ?? null;
 
   const fundScore = fund.data?.score ?? null;
-  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore, newsEvents: news.data?.events ?? null }), [daily, market?.quote, alerts, fundScore, news.data]);
-  const war = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction }), [market, daily, fundScore, trade?.product.direction]);
+  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore, confluenceOn: !!analysis.data?.setup, newsEvents: news.data?.events ?? null }), [daily, market?.quote, alerts, fundScore, news.data, analysis.data]);
+  const fallbackWar = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction }), [market, daily, fundScore, trade?.product.direction]);
+  // the server reading (ICT + confluence + do-nothing rules) wins as soon as it is available
+  const war = analysis.data?.setup ?? fallbackWar;
   const atr14 = useMemo(() => (daily ? atr(daily) : null), [daily]);
 
   const tradePrice = !trade ? null : trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market?.quote?.price ?? null;
@@ -161,7 +165,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   const shown = sheet || lastSheet.current;
 
   const ctx = {
-    fund, news,
+    fund, news, analysis,
     market, marketState: ny, intraday: intraday.data, daily, fx, pulse, war, atr14, trade, tradeState: st, mutate,
     position, tradePrice, eurPerUnit, alerts, lastVisit: lastVisit.current, go, openSheet: setSheet,
   };
@@ -196,6 +200,7 @@ function Room({ onUnauthorized, onDbMissing }) {
         {shown?.type === 'alert' && <AlertDetail alert={shown.alert} />}
         {shown?.type === 'news' && <NewsDetail event={shown.event} />}
         {shown?.type === 'brief' && sheet && <BriefSheet {...ctx} />}
+        {shown?.type === 'confluence' && <ConfluenceDetail analysis={analysis.data} direction={trade?.product.direction} />}
       </Sheet>
 
       <Takeover alert={critical} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />

@@ -523,3 +523,21 @@ a { color: var(--data); }
 .brief-cta small { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
 .brief-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid color-mix(in oklab, var(--data) 45%, transparent); color: var(--data); flex: none; }
 .brief { max-height: 38vh; overflow: auto; margin: 14px 0 0; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, .3); border: 1px solid var(--hair); font: 11.5px/1.55 var(--mono); color: var(--ink-2); white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; }
+
+/* ---------- Confluence ---------- */
+.conf-card { padding: 20px; margin-top: 14px !important; }
+.conf-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.conf-score { font-size: 52px; font-weight: 200; letter-spacing: -.045em; line-height: 1; font-variant-numeric: tabular-nums; }
+.conf-score small { font-size: 20px; color: var(--ink-3); letter-spacing: 0; }
+.conf-side { display: grid; justify-items: end; gap: 6px; text-align: right; }
+.segs { display: grid; grid-template-columns: repeat(15, 1fr); gap: 3px; margin-top: 16px; }
+.segs i { height: 7px; border-radius: 2px; background: rgba(255, 255, 255, .06); transition: background 400ms var(--ease), box-shadow 400ms; transition-delay: calc(var(--i) * 35ms); }
+.segs i.on { background: var(--data); box-shadow: 0 0 10px -2px rgba(98, 198, 222, .6); }
+.scale { display: grid; grid-template-columns: 4fr 3fr 3fr 5fr; margin-top: 7px; font: 10px var(--mono); color: var(--ink-3); }
+.scale span { border-left: 1px solid var(--hair-2); padding-left: 4px; }
+.status-why small { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.status-ok { margin-top: 16px; }
+.side-lab { margin: 4px 0 0; font-size: 12px; }
+.price-now { display: flex; justify-content: space-between; align-items: baseline; margin: 6px -10px; padding: 10px; border-radius: 12px; background: linear-gradient(90deg, rgba(98, 198, 222, .12), transparent); font-size: 14px; }
+.price-now b { font-weight: 500; }
+.tf-strip small { display: block; font: 11px var(--mono); margin-top: 2px; }

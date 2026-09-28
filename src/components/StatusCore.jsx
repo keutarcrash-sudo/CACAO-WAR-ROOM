@@ -22,6 +22,14 @@ function Shape({ shape }) {
   );
 }
 
+const LEAD = {
+  NO_SETUP: 'Rien ne justifie une entrée pour l’instant. Attendre fait partie du plan.',
+  WATCHING: 'Quelques éléments convergent. Rien à faire tant que la configuration ne se précise pas.',
+  DEVELOPING: 'Une configuration se forme. Attendre les confirmations manquantes avant toute décision.',
+  HIGH: 'Plusieurs confirmations convergent. Ce n’est pas un signal d’entrée automatique : la décision reste la tienne.',
+  INVALIDATED: 'Ton invalidation est franchie. Aucun renforcement : réévalue la position.',
+};
+
 export function StatusCore({ war, tiles }) {
   const st = STATES[war.status] || STATES.NO_SETUP;
   const [changing, setChanging] = useState(false);
@@ -44,11 +52,17 @@ export function StatusCore({ war, tiles }) {
           <div className="status-sub">{st.sub}</div>
         </div>
       </div>
-      {war.doNothing && <p className="status-lead">Rien ne justifie une entrée pour l’instant. Attendre fait partie du plan.</p>}
+      <p className="status-lead">{LEAD[war.status] || LEAD.NO_SETUP}</p>
       <div className="status-tiles">
         {tiles.map(t => <div key={t.k}><span>{t.k}</span><b style={t.color ? { color: t.color } : undefined}>{t.v}</b></div>)}
       </div>
+      {war.confirmed?.length > 0 && (
+        <ul className="status-why status-ok">
+          {war.confirmed.map(c => <li key={c.k}><i aria-hidden="true" className="up">✓</i><span>{c.label}{c.evidence && <small>{c.evidence}</small>}</span></li>)}
+        </ul>
+      )}
       <ul className="status-why">
+        {war.against?.map(c => <li key={c.k}><i aria-hidden="true" className="down">!</i><span>{c.label}{c.evidence && <small>{c.evidence}</small>}</span></li>)}
         {war.reasons.map(r => <li key={r.k}><i aria-hidden="true">○</i>{r.t}</li>)}
       </ul>
       {war.next?.length > 0 && (

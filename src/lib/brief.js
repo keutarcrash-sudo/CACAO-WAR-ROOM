@@ -14,7 +14,7 @@ async function structures(market) {
   return tfs.map((t, i) => `${t} : ${res[i]?.candles?.length ? structure(res[i].candles).label : 'N/D'}`).join(' · ');
 }
 
-export async function buildBrief({ market, daily, atr14, fund, news, alerts, trade, position, war }) {
+export async function buildBrief({ market, daily, atr14, fund, news, alerts, trade, position, war, analysis }) {
   const q = market?.quote || {};
   const lv = daily ? previousLevels(daily) : null;
   const vr = daily ? volatilityRatio(daily) : null;
@@ -52,6 +52,25 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
     for (const k of daily.slice(-30)) L.push(`${day(k.t)} · ${n(k.o)} · ${n(k.h)} · ${n(k.l)} · ${n(k.c)}`);
   }
 
+  const an = analysis?.data;
+  if (an?.tfs) {
+    h('Lecture ICT (règles sur les bougies, calculée par l’app)');
+    for (const tf of ['W1', 'D1', '4H', '1H', '15M']) {
+      const t = an.tfs[tf];
+      if (!t) { L.push(`- ${tf} : indisponible`); continue; }
+      const z = x => `${x.dir === 'BULLISH' ? 'haussier' : 'baissier'} ${n(x.bottom)}–${n(x.top)} (${x.status})`;
+      L.push(`- ${tf} : tendance ${t.trend} · ATR ${n(t.atr)}`
+        + `${t.structure.length ? ` · ruptures : ${t.structure.map(e => `${e.type} ${e.dir === 'BULLISH' ? '↑' : '↓'} ${n(e.level)} le ${dt(e.t * 1000)}`).join(', ')}` : ''}`
+        + `${t.sweeps.length ? ` · sweeps : ${t.sweeps.map(e => `${e.side === 'SELL' ? 'sell-side' : 'buy-side'} ${n(e.level)} (${e.label || ''}) le ${dt(e.t * 1000)}`).join(', ')}` : ''}`
+        + `${t.fvgs.length ? ` · FVG : ${t.fvgs.map(z).join(', ')}` : ''}`
+        + `${t.obs.length ? ` · order blocks : ${t.obs.map(z).join(', ')}` : ''}`);
+    }
+    if (an.liquidity?.length) L.push(`Carte de liquidité estimée : ${an.liquidity.map(r => `${r.type} ${n(r.price)} (${r.swept ? 'balayée' : 'intacte'})`).join(', ')}.`);
+    for (const c of [an.long, an.short].filter(Boolean)) {
+      L.push(`Confluence ${c.dir} : ${c.score}/15 (${c.label}). ` + c.items.map(i => `${i.ok ? (i.pts < 0 ? '!' : '✓') : '○'} ${i.label} ${i.ok ? `(${i.evidence})` : ''}`).join(' · '));
+    }
+  }
+
   h('Fondamentaux');
   if (!f) L.push('Indisponibles.');
   else {
@@ -86,8 +105,7 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
   L.push(`Stop / invalidation : ${trade.stop ?? 'non défini'} · objectifs : ${trade.targets.length ? trade.targets.join(', ') : 'aucun'} · drapeaux : technique ${position.flags.technical}, risque ${position.flags.risk}.`);
 
   h('Statut actuel de la War Room');
-  L.push(`${war.doNothing ? 'RIEN À FAIRE' : war.status}. Raisons : ${war.reasons.map(r => r.t).join(' ')}`);
-  L.push('Pas encore calculé par l’app : détection ICT complète (sweeps, BOS/CHoCH, FVG, order blocks) et score de confluence.');
+  L.push(`${war.status}${war.score != null ? ` · confluence ${war.score}/15` : ''}. Raisons : ${war.reasons.map(r => r.t).join(' ') || 'aucune'}${war.next?.length ? ` · manquant : ${war.next.join(', ')}` : ''}`);
 
   h('Questions');
   L.push(

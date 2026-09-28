@@ -6,15 +6,16 @@ import { Num } from '../components/Num.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../lib/api.js';
 import { money, num, pct } from '../lib/format.js';
-import { previousLevels, structure, volatilityRatio } from '../../lib/engines/technical.js';
+import { previousLevels, volatilityRatio } from '../../lib/engines/technical.js';
 
 const TFS = ['W1', 'D1', '4H', '1H', '15M', '5M'];
 const STRUCT_TFS = ['W1', 'D1', '4H', '1H', '15M'];
 const NOTES = { '15M': '15M : timing de l’entrée.', '5M': '5M : timing uniquement. Ne modifie jamais le contexte Daily.' };
 
-export function Market({ market, daily, atr14, trade, position }) {
+export function Market({ market, daily, atr14, trade, position, analysis }) {
   const [tf, setTf] = useState('D1');
-  const [ov, setOv] = useState({ prev: true, piv: false, pos: true });
+  const [ov, setOv] = useState({ prev: true, piv: false, pos: true, fvg: true, ob: false, struct: true });
+  const ta = analysis?.data?.tfs?.[tf] || null;
   const other = usePolling(() => api.market('NY_COCOA', tf), 60e3, [tf], { enabled: tf !== 'D1' });
   const data = tf === 'D1' ? market : other.data;
   const candles = useMemo(() => dedupe(data?.candles), [data]);
@@ -33,13 +34,33 @@ export function Market({ market, daily, atr14, trade, position }) {
       const p = lv.dailyPivots;
       L.push({ price: p.P, color: '#8A93A1', title: 'P', style: LineStyle.Dotted }, { price: p.R1, color: '#6D7786', title: 'R1', style: LineStyle.Dotted }, { price: p.S1, color: '#6D7786', title: 'S1', style: LineStyle.Dotted });
     }
+    // only zones within 3 ATR of price: distant ones would squash the chart and are not actionable
+    const close = z => ta && ta.atr && Math.abs((z.top + z.bottom) / 2 - (market?.quote?.price ?? z.top)) <= 3 * ta.atr;
+    if (ta && ov.fvg) for (const z of ta.fvgs.filter(close).slice(0, 3)) {
+      const c = z.dir === 'BULLISH' ? 'rgba(98,198,222,.75)' : 'rgba(229,87,79,.7)';
+      L.push({ price: z.top, color: c, title: `FVG ${z.dir === 'BULLISH' ? '↑' : '↓'}`, style: LineStyle.Dotted }, { price: z.bottom, color: c, title: '', style: LineStyle.Dotted });
+    }
+    if (ta && ov.ob) for (const z of ta.obs.filter(close).slice(0, 3)) {
+      const c = z.dir === 'BULLISH' ? 'rgba(156,143,245,.85)' : 'rgba(229,138,74,.85)';
+      L.push({ price: z.top, color: c, title: `OB ${z.dir === 'BULLISH' ? '↑' : '↓'}`, style: LineStyle.SparseDotted }, { price: z.bottom, color: c, title: '', style: LineStyle.SparseDotted });
+    }
     if (showPos && ov.pos) {
       L.push({ price: position.avg, color: '#E6E9EE', title: 'Moyenne', style: LineStyle.Solid });
       if (trade.stop != null) L.push({ price: trade.stop, color: '#E5574F', title: 'Stop' });
       trade.targets.forEach((t, i) => L.push({ price: t, color: '#4CC38A', title: `TP${i + 1}` }));
     }
     return L;
-  }, [lv, ov, showPos, position.avg, trade.stop, trade.targets]);
+  }, [lv, ov, showPos, position.avg, trade.stop, trade.targets, ta, market?.quote?.price]);
+
+  const markers = useMemo(() => {
+    if (!ta || !ov.struct || !candles?.length) return [];
+    // map event times onto this timeframe's bars
+    const at = t => { let x = null; for (const k of candles) if (k.t <= t) x = k.t; return x; };
+    return [
+      ...ta.structure.map(e => ({ time: at(e.t), position: e.dir === 'BULLISH' ? 'aboveBar' : 'belowBar', color: '#9C8FF5', shape: e.dir === 'BULLISH' ? 'arrowUp' : 'arrowDown', text: e.type })),
+      ...ta.sweeps.map(e => ({ time: at(e.t), position: e.dir === 'BULLISH' ? 'belowBar' : 'aboveBar', color: '#62C6DE', shape: 'circle', text: 'sweep' })),
+    ].filter(m => m.time != null);
+  }, [ta, ov.struct, candles]);
 
   const toggle = k => setOv(o => ({ ...o, [k]: !o[k] }));
   const q = market?.quote;
@@ -61,7 +82,7 @@ export function Market({ market, daily, atr14, trade, position }) {
       <p className="tf-note">{NOTES[tf] || ''}</p>
 
       <div className="glass surface-2 chart-wrap no-swipe">
-        {candles?.length ? <Chart candles={candles} levels={levels} /> : (
+        {candles?.length ? <Chart candles={candles} levels={levels} markers={markers} /> : (
           <div className="chart-empty">{tf !== 'D1' && other.loading ? 'Chargement…' : data?.status === 'OFFLINE' ? 'Source hors ligne. Aucune bougie disponible.' : 'Aucune donnée pour cette unité de temps.'}</div>
         )}
       </div>
@@ -69,9 +90,14 @@ export function Market({ market, daily, atr14, trade, position }) {
 
       <div className="chips no-swipe">
         <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={ov.prev} onClick={() => toggle('prev')}><i />Veille · semaine</button>
+        <button className="toggle" style={{ '--c': 'var(--struct)' }} aria-pressed={ov.struct} onClick={() => toggle('struct')} disabled={!ta}><i />BOS · sweeps</button>
+        <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={ov.fvg} onClick={() => toggle('fvg')} disabled={!ta}><i />FVG</button>
+        <button className="toggle" style={{ '--c': 'var(--struct)' }} aria-pressed={ov.ob} onClick={() => toggle('ob')} disabled={!ta}><i />Order blocks</button>
         <button className="toggle" style={{ '--c': 'var(--ink-3)' }} aria-pressed={ov.piv} onClick={() => toggle('piv')}><i />Pivots</button>
         <button className="toggle" style={{ '--c': 'var(--ink)' }} aria-pressed={ov.pos} onClick={() => toggle('pos')} disabled={!showPos} title={showPos ? '' : 'Visible si ta position est en USD sur le prix New York'}><i />Ma position</button>
       </div>
+
+      <LiquidityMap analysis={analysis?.data} />
 
       <header className="section-head"><h2>Niveaux</h2><span className="meta">calculés sur le Daily</span></header>
       <ul className="rows levels">
@@ -83,7 +109,7 @@ export function Market({ market, daily, atr14, trade, position }) {
         <li><span className="row-main">ATR 14 jours<small>{vr != null ? `${num(vr, 2)}× sa moyenne 20 j · ${vr > 1.2 ? 'expansion' : vr < 0.8 ? 'compression' : 'normale'}` : '—'}</small></span><span className="row-side num">{money(atr14, 'USD')}</span></li>
       </ul>
 
-      <StructureStrip market={market} />
+      <StructureStrip analysis={analysis?.data} />
 
       <header className="section-head"><h2>London Cocoa</h2><span className="meta">ICE Futures Europe</span></header>
       <p className="empty"><Freshness info={{ key: 'na', label: 'Indisponible' }} /><br />Aucune source gratuite fiable pour Londres. Elle sera branchée via l’API de ton courtier.</p>
@@ -92,24 +118,45 @@ export function Market({ market, daily, atr14, trade, position }) {
   );
 }
 
-function StructureStrip({ market }) {
-  // structure changes slowly: one request per timeframe every 10 minutes
-  const all = usePolling(async () => {
-    const res = await Promise.all(STRUCT_TFS.map(t => (t === 'D1' && market ? Promise.resolve(market) : api.market('NY_COCOA', t).catch(() => null))));
-    return Object.fromEntries(STRUCT_TFS.map((t, i) => [t, res[i]?.candles?.length ? structure(dedupe(res[i].candles)) : null]));
-  }, 600e3, [!!market]);
+function StructureStrip({ analysis }) {
+  const T = { BULLISH: ['Bullish', 'up'], BEARISH: ['Bearish', 'down'], NEUTRAL: ['Neutre', 'faint'] };
   return (
     <>
       <header className="section-head"><h2>Structure</h2><span className="meta">contexte → timing</span></header>
       <ol className="tf-strip">
         {STRUCT_TFS.map(t => {
-          const s = all.data?.[t];
-          const cls = s?.trend === 'BULLISH' ? 'up' : s?.trend === 'BEARISH' ? 'down' : 'faint';
-          return <li key={t} className={cls}><b>{t}</b><span>{s ? s.label : all.loading ? '…' : 'N/D'}</span></li>;
+          const a = analysis?.tfs?.[t];
+          const [l, c] = a ? T[a.trend] || T.NEUTRAL : ['…', 'faint'];
+          const e = a?.structure?.at(-1);
+          return <li key={t} className={c}><b>{t}</b><span>{l}</span>{e && <small className="faint">{e.type}</small>}</li>;
         })}
       </ol>
-      <p className="fine">Structure simplifiée : deux derniers sommets et creux. BOS et CHoCH arrivent avec le moteur ICT.</p>
+      <p className="fine">Tendance lue sur la dernière rupture de structure (BOS / CHoCH) à la clôture. Le 5M ne sert qu’au timing et n’entre pas dans le contexte.</p>
     </>
+  );
+}
+
+function LiquidityMap({ analysis }) {
+  const rows = analysis?.liquidity || [];
+  if (!rows.length) return null;
+  const price = analysis.price;
+  const above = rows.filter(r => r.price >= price).slice(-5), below = rows.filter(r => r.price < price).slice(0, 5);
+  const Row = r => (
+    <li key={`${r.type}${r.price}`} className={r.swept ? 'is-off' : ''}>
+      <span className="row-main">{r.type} · {r.tf}<small>{r.swept ? 'balayée' : 'intacte'}{r.dist != null ? ` · ${r.dist > 0 ? '+' : ''}${num(r.dist, 1)} ATR` : ''}</small></span>
+      <span className="row-side num">{money(r.price, 'USD')}</span>
+    </li>
+  );
+  return (
+    <section>
+      <header className="section-head"><h2>Carte de liquidité</h2><span className="meta">estimée</span></header>
+      <p className="side-lab up">Buy-side au-dessus</p>
+      <ul className="rows">{above.map(Row)}</ul>
+      <div className="price-now"><span>Prix</span><b className="num">{money(price, 'USD')}</b></div>
+      <p className="side-lab down">Sell-side en dessous</p>
+      <ul className="rows">{below.map(Row)}</ul>
+      <p className="fine">Liquidité estimée d’après la structure (sommets et creux égaux, plus hauts et plus bas de la veille et de la semaine). Aucune donnée de liquidation réelle.</p>
+    </section>
   );
 }
 
