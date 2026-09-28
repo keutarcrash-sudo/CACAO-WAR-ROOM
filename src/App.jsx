@@ -125,6 +125,9 @@ function Room({ onUnauthorized, onDbMissing }) {
     } else apply();
   }, [tab]);
 
+  // tapping the current tab again brings its page back to the top
+  const toTop = () => scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+
   // swipe between sections (the tab bar always does the same)
   useEffect(() => {
     let x = 0, y = 0, ok = false;
@@ -193,7 +196,7 @@ function Room({ onUnauthorized, onDbMissing }) {
         </main>
       </div>
 
-      <TabBar current={tab} onChange={go} badge={alerts.some(x => x.level !== 'INFORMATION' && !x.acknowledged) ? 'intel' : null} />
+      <TabBar current={tab} onChange={id => (id === tab ? toTop() : go(id))} badge={alerts.some(x => x.level !== 'INFORMATION' && !x.acknowledged) ? 'intel' : null} />
 
       <Sheet open={!!sheet} onClose={closeSheet}>
         {shown?.type === 'pulse' && <PulseDetail pulse={pulse} />}
