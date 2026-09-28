@@ -3,6 +3,7 @@ import { Freshness } from '../components/Freshness.jsx';
 import { Num } from '../components/Num.jsx';
 import { api } from '../lib/api.js';
 import { ago, dateShort, num } from '../lib/format.js';
+import { ResearchImport } from '../components/ResearchImport.jsx';
 
 export const BIAS = {
   BULLISH: { label: 'Bullish', cls: 'up' },
@@ -67,6 +68,7 @@ export function Fundamentals({ fund }) {
       <Weather w={d.weather} />
       <Enso e={d.enso} />
       <Cot c={d.cot} />
+      <ResearchImport fund={fund} />
       <Manual d={d} fund={fund} form={form} setForm={setForm} />
       <p className="foot">Sources : Open-Meteo, NOAA CPC, CFTC, et tes saisies avec leur source. Aucune valeur estimée n’est présentée comme une donnée.</p>
     </>
