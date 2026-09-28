@@ -69,7 +69,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
 
       {isTurbo(trade.product) && <TurboOrders trade={trade} tradePrice={tradePrice} eurPerUnit={eurPerUnit} market={market} position={position} />}
       {analysis?.data?.reinforce && <Reinforce r={analysis.data.reinforce} turbo={isTurbo(trade.product)} />}
-      <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
+      <Levels trade={trade} mutate={mutate} position={position} cur={cur} suggestion={analysis?.data?.stopSuggestion} />
       <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} tradePrice={tradePrice} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
       <SetupHistory />
@@ -160,7 +160,7 @@ function Field({ id, label, value, onChange, placeholder, suffix, type = 'text' 
   );
 }
 
-function Levels({ trade, mutate, position, cur }) {
+function Levels({ trade, mutate, position, cur, suggestion }) {
   const [stop, setStop] = useState(trade.stop ?? '');
   const [tps, setTps] = useState([trade.targets[0] ?? '', trade.targets[1] ?? '']);
   const act = useAction(mutate);
@@ -175,6 +175,14 @@ function Levels({ trade, mutate, position, cur }) {
         <Field id="tp1" label="Objectif 1" value={tps[0]} onChange={v => setTps([v, tps[1]])} placeholder="optionnel" suffix={SYM[cur]} />
         <Field id="tp2" label="Objectif 2" value={tps[1]} onChange={v => setTps([tps[0], v])} placeholder="optionnel" suffix={SYM[cur]} />
       </div>
+      {!position.entriesCount && (
+        <p className="msg note">
+          Le stop se place là où ta thèse devient fausse, pas selon ton prix d’achat. Inutile de le fixer avant le signal : l’app en propose un, recalculé en continu sur la structure du marché.
+          {suggestion?.stop != null
+            ? <> Suggestion actuelle : <b className="num">{num(suggestion.stop)} $</b> ({suggestion.why}). <button className="link" onClick={() => setStop(String(suggestion.stop))}>Utiliser</button></>
+            : suggestion ? ` Pas de suggestion pour l’instant : ${suggestion.why}.` : ''}
+        </p>
+      )}
       {widened && <p className="msg warn">Tu éloignes le stop d’une position ouverte. C’est souvent le début d’une martingale : le risque augmente sans nouvelle confirmation.</p>}
       {position.targets?.length > 0 && (
         <ul className="rows">
