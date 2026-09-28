@@ -4,7 +4,7 @@ import { Freshness } from '../components/Freshness.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../lib/api.js';
 import { eur, money, num, pct, dateShort, hhmm } from '../lib/format.js';
-import { checkEntry } from '../../lib/engines/trade.js';
+import { checkEntry, maxQuantity } from '../../lib/engines/trade.js';
 import { SetupHistory } from '../components/SetupHistory.jsx';
 
 const parse = s => {
@@ -66,7 +66,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
       </section>
 
       <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
-      <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} />
+      <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} tradePrice={tradePrice} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
       <SetupHistory />
       <Settings trade={trade} mutate={mutate} fx={fx} />
@@ -117,7 +117,7 @@ function Levels({ trade, mutate, position, cur }) {
   );
 }
 
-function Entries({ trade, mutate, eurPerUnit, cur }) {
+function Entries({ trade, mutate, eurPerUnit, cur, tradePrice }) {
   const n = trade.entries.length + 1;
   const planned = trade.plan.split[n - 1];
   const [form, setForm] = useState({ price: '', qty: '', capitalEur: '', feesEur: '', date: today() });
@@ -130,6 +130,10 @@ function Entries({ trade, mutate, eurPerUnit, cur }) {
   const check = useMemo(() => (filled ? checkEntry({ entries: trade.entries, plan: trade.plan, product: trade.product, stop: trade.stop, eurPerUnit }, cand) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filled, form, trade, eurPerUnit]);
+
+  // sizing: the largest quantity that keeps the loss at the stop within the plan
+  const sizeAt = cand.price ?? tradePrice;
+  const size = maxQuantity({ entries: trade.entries, plan: trade.plan, product: trade.product, stop: trade.stop, eurPerUnit }, sizeAt);
 
   const add = async () => {
     try {
@@ -161,6 +165,18 @@ function Entries({ trade, mutate, eurPerUnit, cur }) {
             <Field id="e-cap" label="Capital engagé" value={form.capitalEur} onChange={v => setForm({ ...form, capitalEur: v })} placeholder={String(planned)} suffix="€" />
             <Field id="e-fees" label="Frais" value={form.feesEur} onChange={v => setForm({ ...form, feesEur: v })} placeholder="0" suffix="€" />
             <Field id="e-date" label="Date" type="date" value={form.date} onChange={v => setForm({ ...form, date: v })} />
+          </div>
+          <div className="sizing">
+            {trade.stop == null ? <p className="msg note">Définis d’abord ton stop : la taille maximale en dépend.</p>
+              : eurPerUnit == null ? <p className="msg note">Taux de change indisponible : taille maximale non calculable.</p>
+              : !size ? <p className="msg warn">Au prix {sizeAt != null ? money(sizeAt, cur) : '—'}, ton stop n’est pas du bon côté : aucune taille possible.</p>
+              : (
+                <p className="msg note">
+                  Taille maximale à {money(sizeAt, cur)} : <b className="num">{num(Math.floor(size.qty * 1000) / 1000, 3)} u.</b> pour rester sous €{trade.plan.maxLoss} de perte au stop
+                  {' '}(reste €{num(size.room, 2)} de risque · €{num(size.perUnit, 2)} par unité).
+                  {size.qty > 0 && <button className="link" onClick={() => setForm({ ...form, qty: String(Math.floor(size.qty * 1000) / 1000).replace('.', ',') })}>Utiliser</button>}
+                </p>
+              )}
           </div>
           {check && (
             <div className="checks-box">

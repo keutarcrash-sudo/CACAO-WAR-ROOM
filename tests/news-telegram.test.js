@@ -69,3 +69,12 @@ describe('telegram summaries', () => {
     expect(dueSummary({ evening: true }, {}, at(18))?.slot).toBe('evening');
   });
 });
+
+describe('grouping by key figures', () => {
+  it('groups the same price hike worded differently, not other 2026/27 news', () => {
+    const ev = [{ id: 1, tokens: tokens('COCOBOD in Ghana raises cocoa price to 42,400 cedis per tonne') }, { id: 2, tokens: tokens('New cocoa producer price looms as COCOBOD seeks funding for 2026/27 season') }];
+    expect(matchEvent(tokens('COCOBOD increases cocoa producer price to GH¢42,400 for 2026/27 season'), ev)?.id).toBe(1);
+    expect(matchEvent(tokens('Cocoa producer price increased to GHC42,400 per tonne for 2026/2027 season'), ev)?.id).toBe(1);
+    expect(matchEvent(tokens('COCOBOD sets up GHC16.3bn cocoa financing vehicle for 2026/27'), ev)).toBeNull();
+  });
+});

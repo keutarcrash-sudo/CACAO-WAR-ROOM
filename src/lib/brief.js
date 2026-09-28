@@ -14,7 +14,7 @@ async function structures(market) {
   return tfs.map((t, i) => `${t} : ${res[i]?.candles?.length ? structure(res[i].candles).label : 'N/D'}`).join(' · ');
 }
 
-export async function buildBrief({ market, daily, atr14, fund, news, alerts, trade, position, war, analysis }) {
+export async function buildBrief({ market, daily, atr14, fund, news, alerts, trade, position, war, analysis, fx }) {
   const q = market?.quote || {};
   const lv = daily ? previousLevels(daily) : null;
   const vr = daily ? volatilityRatio(daily) : null;
@@ -46,6 +46,7 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
     L.push(`Pivots du jour : P ${n(lv.dailyPivots.P)} · R1 ${n(lv.dailyPivots.R1)} · R2 ${n(lv.dailyPivots.R2)} · S1 ${n(lv.dailyPivots.S1)} · S2 ${n(lv.dailyPivots.S2)}.`);
   }
   L.push(`Structure simplifiée (deux derniers sommets et creux) : ${market ? await structures(market) : 'N/D'}.`);
+  if (market?.quality?.dropped) L.push(`Qualité : ${market.quality.dropped} bougie(s) Daily incohérente(s) ou vide(s) (clôture hors de sa fourchette, ou ouverture = haut = bas = clôture) écartée(s) des calculs.`);
   L.push('London Cocoa (ICE Europe) : indisponible (pas de source gratuite fiable).');
   if (daily?.length) {
     L.push('', '30 dernières bougies Daily (date · ouverture · haut · bas · clôture) :');
@@ -97,6 +98,8 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
   h('Position et plan');
   L.push(`Produit : ${trade.product.kind === 'cfd' ? 'CFD / levier' : 'sans levier'}, sens ${trade.product.direction}, coté en ${cur}, valeur du point ${trade.product.pointValue}. Prix utilisé : ${trade.priceSource === 'manual' ? 'saisi à la main' : 'New York différé'}.`);
   L.push(`Plan : budget ${trade.plan.plannedCapital} €, entrées ${trade.plan.split.join(' / ')} €, perte maximale ${trade.plan.maxLoss} €.`);
+  const fxd = fx?.data;
+  L.push(fxd?.raw ? `Taux BCE du ${fxd.date} : 1 € = ${n(fxd.raw.EURUSD, 4)} $ = ${n(fxd.raw.EURGBP, 4)} £. Perte en € pour 1 unité et 100 $ de distance au stop : ${n(100 * trade.product.pointValue * fxd.eurPer.USD, 2)} €.` : 'Taux de change : indisponible.');
   L.push(`Statut : ${position.status}. Engagé ${n(position.capital)} € · restant ${n(position.remaining)} €.`);
   for (const e of trade.entries) L.push(`- Entrée ${e.n} : ${n(e.price, 1)} × ${e.qty} u., ${e.capitalEur} €, le ${e.date}${e.offRules ? ' (HORS RÈGLES)' : ''}.`);
   if (trade.entries.length) {

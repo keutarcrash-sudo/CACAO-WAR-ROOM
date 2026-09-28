@@ -44,3 +44,13 @@ describe('frankfurter parseRates', () => {
     expect(() => parseRates({ rates: {} })).toThrow();
   });
 });
+
+import { saneBar } from '../lib/providers/market/yahoo.js';
+describe('bar sanity', () => {
+  it('drops corrupt and placeholder daily bars', () => {
+    expect(saneBar({ o: 5818, h: 5819, l: 5816, c: 5759 }, true)).toBe(false); // close outside its range
+    expect(saneBar({ o: 5924, h: 5924, l: 5924, c: 5924 }, true)).toBe(false); // flat placeholder
+    expect(saneBar({ o: 5924, h: 5924, l: 5924, c: 5924 }, false)).toBe(true); // flat is fine intraday
+    expect(saneBar({ o: 5625, h: 5741, l: 5580, c: 5662 }, true)).toBe(true);
+  });
+});

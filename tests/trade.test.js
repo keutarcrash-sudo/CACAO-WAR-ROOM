@@ -77,3 +77,15 @@ describe('checkEntry', () => {
     expect(r.errors.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+import { maxQuantity } from '../lib/engines/trade.js';
+describe('position sizing', () => {
+  it('fits the remaining loss budget at the stop', () => {
+    const r = maxQuantity({ entries: [], product, plan: DEFAULT_PLAN, stop: 5111, eurPerUnit: 0.85 }, 5662);
+    expect(r.qty).toBeCloseTo(50 / (551 * 0.85), 6);
+    const withE1 = maxQuantity({ entries: [{ price: 5662, qty: 0.05, capitalEur: 30 }], product, plan: DEFAULT_PLAN, stop: 5111, eurPerUnit: 0.85 }, 5662);
+    expect(withE1.room).toBeCloseTo(50 - 551 * 0.05 * 0.85, 6);
+    expect(maxQuantity({ product, plan: DEFAULT_PLAN, stop: 5700, eurPerUnit: 0.85 }, 5662)).toBeNull();
+    expect(maxQuantity({ product, plan: DEFAULT_PLAN, stop: null, eurPerUnit: 0.85 }, 5662)).toBeNull();
+  });
+});
