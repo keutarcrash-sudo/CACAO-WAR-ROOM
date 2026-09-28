@@ -46,11 +46,13 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
     L.push(`Pivots du jour : P ${n(lv.dailyPivots.P)} · R1 ${n(lv.dailyPivots.R1)} · R2 ${n(lv.dailyPivots.R2)} · S1 ${n(lv.dailyPivots.S1)} · S2 ${n(lv.dailyPivots.S2)}.`);
   }
   L.push(`Structure simplifiée (deux derniers sommets et creux) : ${market ? await structures(market) : 'N/D'}.`);
-  if (market?.quality?.dropped) L.push(`Qualité : ${market.quality.dropped} bougie(s) Daily incohérente(s) ou vide(s) (clôture hors de sa fourchette, ou ouverture = haut = bas = clôture) écartée(s) des calculs.`);
+  const qy = market?.quality;
+  if (qy?.rebuilt) L.push(`Qualité : ${qy.rebuilt} bougie(s) Daily vide(s), incohérente(s) ou absente(s) chez Yahoo reconstruite(s) à partir des bougies 1H (marquées « 1H » ci-dessous).`);
+  if (qy?.unrepaired) L.push(`Qualité : ${qy.unrepaired} bougie(s) Daily incohérente(s) ou vide(s) sans données 1H pour les reconstruire (surtout anciennes), écartée(s) des calculs.`);
   L.push('London Cocoa (ICE Europe) : indisponible (pas de source gratuite fiable).');
   if (daily?.length) {
     L.push('', '30 dernières bougies Daily (date · ouverture · haut · bas · clôture) :');
-    for (const k of daily.slice(-30)) L.push(`${day(k.t)} · ${n(k.o)} · ${n(k.h)} · ${n(k.l)} · ${n(k.c)}`);
+    for (const k of daily.slice(-30)) L.push(`${day(k.t)} · ${n(k.o)} · ${n(k.h)} · ${n(k.l)} · ${n(k.c)}${k.rebuilt ? ' · 1H' : ''}`);
   }
 
   const an = analysis?.data;
