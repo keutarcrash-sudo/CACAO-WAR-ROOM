@@ -1,6 +1,15 @@
 // All data goes through our own /api routes. The session cookie is sent automatically.
 export class ApiError extends Error {
-  constructor(status, body) { super(body?.error || `HTTP ${status}`); this.status = status; this.code = body?.status; this.body = body; }
+  constructor(status, body) { super(message(status, body)); this.status = status; this.code = body?.status; this.body = body; }
+}
+
+// Our routes answer { error: "phrase" }; the hosting platform may answer { error: { message } } or HTML.
+function message(status, body) {
+  const e = body?.error;
+  if (typeof e === 'string') return e;
+  if (status === 504) return 'Le serveur a mis trop de temps à répondre. Réessaie dans un instant.';
+  if (e && typeof e === 'object' && e.message) return `Erreur du serveur : ${e.message}`;
+  return `Erreur du serveur (${status || 'réseau'}).`;
 }
 
 async function call(path, { method = 'GET', body } = {}) {
