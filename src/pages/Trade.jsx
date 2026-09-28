@@ -5,6 +5,7 @@ import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../lib/api.js';
 import { eur, money, num, pct, dateShort, hhmm } from '../lib/format.js';
 import { checkEntry, maxQuantity, isTurbo, turboValue, underlyingForTurboPrice } from '../../lib/engines/trade.js';
+import { targetForGain } from '../../lib/engines/ladder.js';
 import { atr } from '../../lib/engines/technical.js';
 import { SetupHistory } from '../components/SetupHistory.jsx';
 
@@ -68,7 +69,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
       </section>
 
       {isTurbo(trade.product) && <TurboOrders trade={trade} tradePrice={tradePrice} eurPerUnit={eurPerUnit} market={market} position={position} />}
-      {analysis?.data?.reinforce && <Reinforce r={analysis.data.reinforce} turbo={isTurbo(trade.product)} />}
+      <LadderPlan trade={trade} mutate={mutate} analysis={analysis?.data} eurPerUnit={eurPerUnit} tradePrice={tradePrice} />
       <Levels trade={trade} mutate={mutate} position={position} cur={cur} suggestion={analysis?.data?.stopSuggestion} />
       <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} tradePrice={tradePrice} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
@@ -127,23 +128,51 @@ function TurboOrders({ trade, tradePrice, eurPerUnit, market, position }) {
   );
 }
 
-// E2 / E3 conditions, all visible: the entry is allowed only when every line is checked.
-function Reinforce({ r, turbo }) {
+// Plan B: three limit orders in the zone, one stop under it, decided before the first entry.
+function LadderPlan({ trade, mutate, analysis, eurPerUnit, tradePrice }) {
+  const act = useAction(mutate);
+  const frozen = trade.plan.ladder;
+  const preview = analysis?.ladderPreview;
+  const l = frozen || preview;
+  const turbo = isTurbo(trade.product);
+  const eurAt = lv => (turbo && eurPerUnit != null ? turboValue(trade.product, lv) * eurPerUnit : null);
+  const goal = trade.plan.targetGain ?? 15;
+  const target = trade.entries.length ? targetForGain({ entries: trade.entries, product: trade.product, gainEur: goal, eurPerUnit }) : null;
+  const held = trade.entries.reduce((s, e) => s + e.qty, 0);
+  const signal = analysis?.setup?.status === 'HIGH';
+  if (!l) {
+    return (
+      <section>
+        <header className="section-head"><h2>Plan d’accumulation</h2><span className="meta">3 ordres · 1 stop</span></header>
+        <p className="empty">{analysis?.stopSuggestion?.why ? `Pas de plan possible pour l’instant : ${analysis.stopSuggestion.why}.` : 'Le plan apparaîtra dès que l’analyse aura trouvé un stop sur la structure.'}</p>
+      </section>
+    );
+  }
   return (
     <section>
-      <header className="section-head"><h2>Renfort E{r.n}</h2><span className={`meta ${r.ok ? 'up' : ''}`}>{r.ok ? 'possible' : 'pas maintenant'}</span></header>
-      <ul className="rows">
-        {r.checks.map(c => (
-          <li key={c.k}><span className="row-main">{c.ok ? '✓' : '✕'} {c.label}<small>{c.detail}</small></span></li>
-        ))}
-      </ul>
-      {r.ok && (
-        <p className="msg ok">
-          {turbo && r.unitEur != null ? `${r.qty} turbos à environ ${num(r.unitEur, 2)} € (€${r.amount}).` : `Taille maximale ${r.qty} u.`}
-          {r.stopNeeded != null ? ` D’abord, remonte ton stop à ${num(r.stopNeeded)} $ (et ton ordre stop BoursoBank).` : ''} Rien ne t’oblige à renforcer.
-        </p>
+      <header className="section-head"><h2>Plan d’accumulation</h2><span className={`meta ${frozen ? 'up' : ''}`}>{frozen ? 'figé' : signal ? 'signal présent' : 'aperçu'}</span></header>
+      {!frozen && (
+        <p className={`msg ${signal ? 'ok' : 'note'}`}>{signal
+          ? 'Haute confluence : si tu y vas, fige ce plan, puis passe les ordres ci-dessous dans BoursoBank.'
+          : 'Aperçu recalculé en continu. Attends l’alerte « Haute confluence » avant de figer le plan et de passer les ordres.'}</p>
       )}
-      <p className="fine">Jamais sur une baisse : il faut que le marché t’ait déjà donné raison. Seuils : {`0,5 ATR de gain`}, nouvelle cassure dans ton sens (Daily, 4H ou 1H) ou haute confluence, risque total sous ta perte maximale.</p>
+      <ul className="rows">
+        {l.levels.map(x => {
+          const done = trade.entries.some(e => e.n === x.n);
+          return (
+            <li key={x.n}>
+              <span className="entry-n">E{x.n}</span>
+              <span className="row-main num">{num(x.level)} $ · {x.qty === 0 ? <span className="warn">mise trop faible pour 1 turbo</span> : `${x.qty} ${turbo ? 'turbos' : 'u.'}`}<small>{done ? 'exécutée ✓' : `${x.n === 1 ? 'achat' : 'ordre d’achat à cours limité'}${x.unitEur != null ? ` à ${num(x.unitEur, 2)} €` : ''}${x.unitEur != null ? ` · ≈ €${num(x.qty * x.unitEur, 2)}` : ''}`}</small></span>
+            </li>
+          );
+        })}
+        <li><span className="entry-n down">SL</span><span className="row-main num">{num(l.stop)} $<small>ordre stop sur {frozen && held ? `${held} ${turbo ? 'turbos' : 'u.'} (quantité détenue)` : 'la quantité détenue'}{eurAt(l.stop) != null ? ` à ${num(eurAt(l.stop), 2)} €` : ''} · jamais déplacé</small></span></li>
+        <li><span className="entry-n up">TP</span><span className="row-main num">+{goal} € de gain<small>{target != null ? `cacao à ${num(target)} $${eurAt(target) != null ? ` · vente à cours limité à ${num(eurAt(target), 2)} €` : ''}` : 'calculé après la première entrée'}</small></span></li>
+      </ul>
+      <p className="fine">Pire cas (les 3 ordres exécutés puis le stop) : €{num(l.worstLoss ?? 0, 2)} sur €{trade.plan.maxLoss}{preview?.scaled && !frozen ? ' · tailles réduites pour rester sous le maximum' : ''}. Après chaque exécution, enregistre l’entrée et mets l’ordre stop à jour sur la quantité totale.</p>
+      {act.error && <p className="msg bad">{act.error}</p>}
+      {!frozen && !trade.entries.length && <button className="btn block primary" disabled={act.busy} onClick={() => act.run('ladder', { ladder: preview }).catch(() => {})}>{act.busy ? 'Enregistrement…' : 'Figer ce plan'}</button>}
+      {frozen && !trade.entries.length && <button className="btn block" disabled={act.busy} onClick={() => act.run('ladder', { ladder: null }).catch(() => {})}>Annuler le plan figé</button>}
     </section>
   );
 }
@@ -163,6 +192,8 @@ function Field({ id, label, value, onChange, placeholder, suffix, type = 'text' 
 function Levels({ trade, mutate, position, cur, suggestion }) {
   const [stop, setStop] = useState(trade.stop ?? '');
   const [tps, setTps] = useState([trade.targets[0] ?? '', trade.targets[1] ?? '']);
+  // follow the saved stop (e.g. set by freezing the plan)
+  useEffect(() => setStop(trade.stop ?? ''), [trade.stop]);
   const act = useAction(mutate);
   const dirty = parse(stop) !== trade.stop || tps.map(parse).filter(x => x != null).join() !== trade.targets.join();
   const s = parse(stop);
@@ -183,6 +214,7 @@ function Levels({ trade, mutate, position, cur, suggestion }) {
             : suggestion ? ` Pas de suggestion pour l’instant : ${suggestion.why}.` : ''}
         </p>
       )}
+      {trade.plan.ladder && parse(stop) !== trade.plan.ladder.stop && <p className="msg warn">Ce n’est plus le stop du plan figé ({num(trade.plan.ladder.stop)} $). Un plan B ne déplace jamais son stop.</p>}
       {widened && <p className="msg warn">Tu éloignes le stop d’une position ouverte. C’est souvent le début d’une martingale : le risque augmente sans nouvelle confirmation.</p>}
       {position.targets?.length > 0 && (
         <ul className="rows">
@@ -352,6 +384,7 @@ function Settings({ trade, mutate, fx }) {
   const [pv, setPv] = useState(trade.product.pointValue);
   const [budget, setBudget] = useState(trade.plan.plannedCapital);
   const [maxLoss, setMaxLoss] = useState(trade.plan.maxLoss);
+  const [goal, setGoal] = useState(trade.plan.targetGain ?? 15);
   const act = useAction(mutate);
   const p = trade.product;
   const save = patch => act.run('settings', patch).catch(() => {});
@@ -396,8 +429,9 @@ function Settings({ trade, mutate, fx }) {
             {!isTurbo(p) && <Field id="pv" label="Valeur du point" value={pv} onChange={setPv} />}
             <Field id="budget" label="Budget maximum" value={budget} onChange={setBudget} suffix="€" />
             <Field id="maxloss" label="Perte maximale" value={maxLoss} onChange={setMaxLoss} suffix="€" />
+            <Field id="goal" label="Objectif de gain" value={goal} onChange={setGoal} suffix="€" />
           </div>
-          <button className="btn" disabled={act.busy} onClick={() => save({ product: isTurbo(p) ? {} : { pointValue: parse(pv) }, plan: { plannedCapital: parse(budget), maxLoss: parse(maxLoss) } })}>Enregistrer le plan</button>
+          <button className="btn" disabled={act.busy} onClick={() => save({ product: isTurbo(p) ? {} : { pointValue: parse(pv) }, plan: { plannedCapital: parse(budget), maxLoss: parse(maxLoss), targetGain: parse(goal) } })}>Enregistrer le plan</button>
           {act.error && <p className="msg bad">{act.error}</p>}
           <p className="fine">Taux BCE {fx.data?.date ? `du ${fx.data.date}` : 'indisponible'} : 1 € = {num(fx.data?.raw?.EURUSD, 4)} $ · {num(fx.data?.raw?.EURGBP, 4)} £. Pour un CFD cacao coté par tonne, la valeur du point vaut en général 1 et la quantité est en tonnes : vérifie la fiche du produit chez ton courtier.</p>
         </div>
