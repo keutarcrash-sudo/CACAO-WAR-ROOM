@@ -37,11 +37,16 @@ export default guarded(async (req, res) => {
       return send(res, 200, { status: 'ERROR', error: String(e.message || e), manualSql: action === 'install' ? scheduleSql(url, '<la clé affichée dans l’app>').join(';\n') + ';' : null });
     }
   }
-  let job = null;
-  try { [job] = await sql`select jobid, schedule, active from cron.job where jobname = 'cocoa-war-room-monitor'`; } catch { /* pg_cron not enabled */ }
+  let job = null, lastCall = null;
+  try { [job] = await sql`select jobid, schedule, active, command from cron.job where jobname = 'cocoa-war-room-monitor'`; } catch { /* pg_cron not enabled */ }
+  // what Supabase actually got back from its last call (pg_net keeps recent responses)
+  try { [lastCall] = await sql`select status_code, error_msg, created from net._http_response order by created desc limit 1`; } catch { /* pg_net not enabled */ }
+  const jobUrl = job?.command?.match(/url\s*:=\s*'([^']+)'/)?.[1] ?? null;
   send(res, 200, {
     status: 'OK',
     scheduled: !!job?.active, schedule: job?.schedule ?? null, url,
+    jobUrl, staleUrl: !!jobUrl && jobUrl !== url,
+    lastCall: lastCall ? { status: lastCall.status_code, error: lastCall.error_msg, at: new Date(lastCall.created).getTime() } : null,
     lastRun: await getSetting(sql, 'monitor_last_run'),
   });
 }, { auth: false });

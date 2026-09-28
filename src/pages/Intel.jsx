@@ -119,7 +119,11 @@ function TelegramCard() {
             <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={!!d.summaries?.morning} disabled={!!busy} onClick={() => act(`summaries&morning=${d.summaries?.morning ? 0 : 1}&evening=${d.summaries?.evening ? 1 : 0}`)}><i />Matin · 8 h</button>
             <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={!!d.summaries?.evening} disabled={!!busy} onClick={() => act(`summaries&morning=${d.summaries?.morning ? 1 : 0}&evening=${d.summaries?.evening ? 0 : 1}`)}><i />Soir · 18 h</button>
           </div>
-          <p className="fine">Envoyés par la surveillance continue (à activer ci-dessous), heure de Paris.</p>
+          {(d.summaries?.morning || d.summaries?.evening) && (!d.monitorLastRun || Date.now() - d.monitorLastRun > 15 * 60e3) && (
+            <p className="msg warn">La surveillance continue n’a pas tourné {d.monitorLastRun ? `depuis ${ago(d.monitorLastRun)}` : 'récemment'} : aucun résumé ne peut partir. Vérifie-la ci-dessous.</p>
+          )}
+          <button className="btn" disabled={!!busy} onClick={() => act('summary-now')}>{busy === 'summary-now' ? 'Envoi…' : 'Recevoir un résumé maintenant'}</button>
+          <p className="fine">Envoyés par la surveillance continue entre 8 h et 11 h, puis entre 18 h et 21 h (heure de Paris), au premier passage de la plage.</p>
         </div>
       )}
       {d?.recent?.length > 0 && (
@@ -145,6 +149,14 @@ function MonitorCard() {
         ? 'Supabase réveille la War Room toutes les 5 minutes : prix, niveaux, risque, fondamentaux et news sont vérifiés même app fermée.'
         : 'Sans elle, les événements ne sont calculés que quand l’app est ouverte. L’activation crée une tâche planifiée dans ta base Supabase.'}</p>
       {d?.lastRun && <Freshness info={{ key: 'ok', label: `Dernier passage ${ago(d.lastRun.at)}${d.lastRun.manual ? ' (manuel)' : ''}` }} />}
+      {d?.scheduled && d.staleUrl && <p className="msg bad">La tâche appelle une ancienne adresse ({d.jobUrl}). Touche Désactiver puis Activer pour la mettre à jour.</p>}
+      {d?.scheduled && d.lastCall && d.lastCall.status !== 200 && (
+        <p className="msg bad">Dernier appel de Supabase {ago(d.lastCall.at)} : {d.lastCall.status ? `erreur ${d.lastCall.status}` : d.lastCall.error || 'sans réponse'}.
+          {d.lastCall.status === 401 ? ' L’adresse appelée est protégée par Vercel : Désactive puis Active depuis l’adresse principale de l’app.' : ''}</p>
+      )}
+      {d?.scheduled && !d.staleUrl && (!d.lastRun || Date.now() - d.lastRun.at > 15 * 60e3) && !(d.lastCall && d.lastCall.status !== 200) && (
+        <p className="msg warn">Active, mais aucun passage depuis plus de 15 minutes. Désactive puis Active pour la recréer.</p>
+      )}
       {d?.error && <p className="msg bad">{d.error}</p>}
       {d?.manualSql && <details className="tech"><summary>Activation manuelle (SQL Editor de Supabase)</summary><pre className="sql">{d.manualSql}</pre></details>}
       <div className="btn-row">

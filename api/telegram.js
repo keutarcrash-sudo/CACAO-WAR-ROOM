@@ -4,6 +4,7 @@ import * as tg from '../lib/telegram/client.js';
 import { statusMessage, listMessage, HELP } from '../lib/telegram/messages.js';
 import { loadFundamentals } from '../lib/services/fundamentals.js';
 import { snapshot } from '../lib/services/snapshot.js';
+import { maybeSummary } from '../lib/services/monitor.js';
 import { guarded, publicHost, query, readJson, send } from '../lib/http/respond.js';
 import { isAuthenticated } from '../lib/auth/session.js';
 
@@ -79,6 +80,9 @@ export default guarded(async (req, res) => {
       await tg.sendMessage('✅ <b>Cocoa War Room</b> est connecté. Seules les alertes critiques t’arriveront ici.');
     } else if (action === 'silent' || action === 'resume') {
       await repo.setSetting(sql, 'telegram_silent', action === 'silent');
+    } else if (action === 'summary-now') {
+      const r = await maybeSummary(sql, { force: true });
+      if (r.skipped) error = typeof r.skipped === 'string' ? r.skipped : 'Résumé non envoyé.';
     } else if (action === 'summaries') {
       const q = query(req);
       await repo.setSetting(sql, 'telegram_summaries', { morning: q.get('morning') === '1', evening: q.get('evening') === '1' });
@@ -95,5 +99,7 @@ export default guarded(async (req, res) => {
     silent: await repo.getSetting(sql, 'telegram_silent', false),
     summaries: await repo.getSetting(sql, 'telegram_summaries', { morning: false, evening: false }),
     recent: (await repo.recentNotifications(sql)).slice(0, 10),
+    // summaries are sent by the continuous monitoring: say when it has not run lately
+    monitorLastRun: (await repo.getSetting(sql, 'monitor_last_run', null))?.at ?? null,
   });
 }, { auth: false });
