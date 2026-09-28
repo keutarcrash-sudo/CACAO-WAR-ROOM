@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/cron.js": { "maxDuration": 60 },
+    "api/telegram.js": { "maxDuration": 30 },
+    "api/fundamentals.js": { "maxDuration": 60 },
+    "api/news.js": { "maxDuration": 30 }
+  }
+}

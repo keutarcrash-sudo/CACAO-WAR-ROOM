@@ -4,7 +4,7 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 
 > Un système qui surveille tout ce qui peut faire évoluer la thèse, et qui indique quand plusieurs éléments convergent, ou quand il vaut mieux **ne rien faire**.
 
-## Version 0.2 : ce qui marche
+## Version 0.3 : ce qui marche
 
 | Module | État |
 |---|---|
@@ -21,11 +21,18 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 | Base de données | ✅ Supabase (PostgreSQL). Tables créées automatiquement. Rien dans le navigateur |
 | Accès | ✅ Mot de passe unique, session signée de 30 jours |
 | Prix Londres (ICE Europe) | ❌ Affiché « indisponible » : pas de source gratuite fiable |
-| Fondamentaux, news, Telegram, ICT, confluence, IA | ⏳ Phases suivantes, affichés « pas encore branché » |
+| Fondamentaux | ✅ Pluie de 8 zones cacao vs normale 2001–2020 (Open-Meteo), ENSO (NOAA), positions des fonds (CFTC), saisie avec source pour production, arrivages, stocks, grindings. Score −10 à +10 et « Ta thèse » |
+| News | ✅ Google News, doublons regroupés, catégorie et importance par mots-clés (confiance faible) |
+| Telegram | ✅ Alertes critiques seulement, anti-spam, mode silencieux, commandes /status /position /fundamental /news /alerts |
+| Surveillance continue | ✅ Tâche Supabase toutes les 5 minutes, activée depuis l'onglet Intelligence |
+| ICT, confluence, analyse IA | ⏳ Phases suivantes |
 
 Tant que la confluence et les fondamentaux ne sont pas branchés, la War Room affiche **« Aucun setup · Rien à faire »** avec ses raisons. C'est voulu.
 
-Les événements sont calculés quand l'app est ouverte. La surveillance en continu (même app fermée) arrivera avec Telegram, via une tâche planifiée Supabase.
+### Telegram et surveillance (onglet Intelligence)
+1. Dans Telegram, **@BotFather** → `/newbot` → copie le token dans Vercel sous `TELEGRAM_BOT_TOKEN`, puis Redeploy.
+2. Onglet Intelligence → **Connecter**. Envoie `/start` à ton bot : il répond avec ton identifiant, à mettre dans Vercel sous `TELEGRAM_CHAT_ID`, puis Redeploy.
+3. **Surveillance continue → Activer.** Si Supabase refuse, active d'abord les extensions **pg_cron** et **pg_net** (Supabase → Database → Extensions), puis réessaie.
 
 ## Mise en ligne (15 minutes, gratuit)
 
@@ -59,7 +66,7 @@ npm test         # calculs, règles, alertes, session, et le schéma SQL sur un 
 npm run build
 ```
 
-- `api/` : fonctions serveur Vercel (`auth`, `market`, `fx`, `state`, `trade`, `journal`)
+- `api/` : fonctions serveur Vercel (`auth`, `market`, `fx`, `state`, `trade`, `journal`, `fundamentals`, `news`, `telegram`, `cron`)
 - `lib/db/` : schéma (migrations automatiques) et requêtes PostgreSQL
 - `lib/services/` : logique serveur (événements de marché, actions du Trade Manager)
 - `lib/providers/` : sources de données interchangeables

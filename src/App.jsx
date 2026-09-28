@@ -11,7 +11,7 @@ import { Brand } from './components/Brand.jsx';
 import { WarRoom } from './pages/WarRoom.jsx';
 import { Market } from './pages/Market.jsx';
 import { Fundamentals } from './pages/Fundamentals.jsx';
-import { Intel } from './pages/Intel.jsx';
+import { Intel, NewsDetail } from './pages/Intel.jsx';
 import { Trade } from './pages/Trade.jsx';
 import { usePolling } from './hooks/usePolling.js';
 import { useLongPress } from './hooks/useLongPress.js';
@@ -51,6 +51,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   const fx = usePolling(api.fx, 6 * 3600e3);
   const st = usePolling(api.state, 60e3);
   const fund = usePolling(api.fundamentals, 10 * 60e3);
+  const news = usePolling(() => api.news(), 10 * 60e3);
 
   // any route answering 401 / 503 sends us back to the right gate
   useEffect(() => {
@@ -71,7 +72,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   if (lastVisit.current === undefined && st.data) lastVisit.current = st.data.lastVisit ?? null;
 
   const fundScore = fund.data?.score ?? null;
-  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore }), [daily, market?.quote, alerts, fundScore]);
+  const pulse = useMemo(() => marketPulse({ daily, quote: market?.quote, alerts, fundamentalsOn: !!fundScore, newsEvents: news.data?.events ?? null }), [daily, market?.quote, alerts, fundScore, news.data]);
   const war = useMemo(() => evaluateWarRoom({ market, daily, modules: { fundamentals: !!fundScore, confluence: false }, fundamentals: fundScore, direction: trade?.product.direction }), [market, daily, fundScore, trade?.product.direction]);
   const atr14 = useMemo(() => (daily ? atr(daily) : null), [daily]);
 
@@ -180,7 +181,7 @@ function Room({ onUnauthorized, onDbMissing }) {
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}
               {tab === 'fund' && <Fundamentals fund={fund} />}
-              {tab === 'intel' && <Intel alerts={alerts} openSheet={setSheet} />}
+              {tab === 'intel' && <Intel alerts={alerts} news={news} openSheet={setSheet} />}
               {tab === 'trade' && trade && <Trade {...ctx} />}
             </>
           )}
@@ -192,6 +193,7 @@ function Room({ onUnauthorized, onDbMissing }) {
       <Sheet open={!!sheet} onClose={closeSheet}>
         {shown?.type === 'pulse' && <PulseDetail pulse={pulse} />}
         {shown?.type === 'alert' && <AlertDetail alert={shown.alert} />}
+        {shown?.type === 'news' && <NewsDetail event={shown.event} />}
       </Sheet>
 
       <Takeover alert={critical} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />

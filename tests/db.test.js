@@ -23,7 +23,7 @@ afterAll(async () => { await sql?.end(); await server?.stop(); await pg?.close()
 describe('schema', () => {
   it('records the migration once', async () => {
     const v = await sql`select version from schema_version`;
-    expect(v.map(r => r.version)).toEqual([1, 2, 3]);
+    expect(v.map(r => r.version)).toEqual([1, 2, 3, 4]);
   });
 });
 
@@ -147,6 +147,31 @@ describe('fundamentals service', () => {
       expect(r.score.coverage).toBe(3);
       expect(r.score.bias).toBe('BULLISH');
       expect((await repo.listAlerts(sql)).some(a => a.category === 'FUNDAMENTALS')).toBe(true);
+    } finally { globalThis.fetch = real; }
+  });
+});
+
+describe('news service', () => {
+  it('stores master events, merges duplicates, raises alerts once', async () => {
+    const { refreshNews } = await import('../lib/services/news.js');
+    const real = globalThis.fetch;
+    const now = Date.now();
+    const rss = items => `<rss><channel>${items.map(([t, s, u]) => `<item><title>${t} - ${s}</title><link>${u}</link><pubDate>${new Date(now - 3600e3).toUTCString()}</pubDate><source url="x">${s}</source></item>`).join('')}</channel></rss>`;
+    let feed = rss([['Ghana cuts cocoa crop forecast by 18%', 'Reuters', 'https://n/1']]);
+    globalThis.fetch = async () => new Response(feed, { status: 200 });
+    try {
+      let r = await refreshNews(sql, { force: true });
+      expect(r.created).toBe(1);
+      feed = rss([['Ghana cuts cocoa crop forecast by 18%', 'Reuters', 'https://n/1'], ['Ghana cuts cocoa crop forecast 18 percent', 'Bloomberg', 'https://n/2']]);
+      r = await refreshNews(sql, { force: true });
+      expect(r).toMatchObject({ created: 0, merged: 1 });
+      const ev = await repo.recentNewsEvents(sql);
+      expect(ev[0].sources.map(s => s.name)).toEqual(['Reuters', 'Bloomberg']);
+      expect(ev[0].level).toBe('CRITICAL');
+      const alerts = (await repo.listAlerts(sql)).filter(a => a.category === 'NEWS');
+      expect(alerts.map(a => a.level)).toEqual(['CRITICAL']); // Reuters alone is already reliable; the merge adds no new alert
+      const log = await repo.recentNotifications(sql);
+      expect(log[0].status).toBe('NOT_CONFIGURED');
     } finally { globalThis.fetch = real; }
   });
 });

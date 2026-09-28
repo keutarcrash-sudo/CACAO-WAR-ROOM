@@ -14,9 +14,9 @@ import { whatChanged } from '../../lib/engines/warroom.js';
 
 const TEAM = [
   { name: 'Market Analyst', state: 'on', note: 'Prix New York différé, historique, ATR' },
-  { name: 'Risk Manager', state: 'on', note: 'Position, risque au stop, règles d’entrée, alertes de risque' },
+  { name: 'Risk Manager', state: 'on', note: 'Position, risque au stop, règles d’entrée, alertes Telegram' },
   { name: 'ICT / Technical Analyst', state: 'part', note: 'Niveaux et structure simplifiée · ICT en phase 6' },
-  { name: 'News Analyst', state: 'off', note: 'Phase 3 · news et Telegram' },
+  { name: 'News Analyst', state: 'part', note: 'Google News dédoublonné, classement par mots-clés · IA à venir' },
   { name: 'Weather Analyst', state: 'on', note: 'Pluie des zones cacao vs normale, ENSO (Open-Meteo, NOAA)' },
   { name: 'Positioning Analyst', state: 'on', note: 'Fonds et commerciaux, percentile sur 3 ans (CFTC)' },
   { name: 'Agricultural / Supply Analyst', state: 'part', note: 'Production, stocks, arrivages, grindings : saisie avec source' },
