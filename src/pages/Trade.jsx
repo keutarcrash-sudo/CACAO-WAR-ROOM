@@ -333,7 +333,7 @@ function Settings({ trade, mutate, fx }) {
       {open && (
         <div className="glass surface-2 settings">
           <Seg label="Sens" value={p.direction} options={[['LONG', 'Long'], ['SHORT', 'Short']]} onChange={v => save({ product: { direction: v } })} />
-          <Seg label="Type de produit" value={p.kind} options={[['turbo', 'Turbo'], ['cfd', 'CFD / levier'], ['spot', 'Sans levier']]} onChange={v => save({ product: v === 'turbo' ? { kind: v, strike: p.strike ?? 4490.51, barrier: p.barrier ?? 4490.51, parity: p.parity ?? 100, name: p.name || 'Turbo Call SG Cocoa 4 490', direction: 'LONG' } : { kind: v } })} />
+          <Seg label="Type de produit" value={p.kind} options={[['turbo', 'Turbo'], ['cfd', 'CFD / levier'], ['spot', 'Sans levier']]} onChange={v => save({ product: v === 'turbo' ? { kind: v, strike: p.strike ?? 4490.514, barrier: p.barrier ?? 4635, parity: p.parity ?? 100, name: p.name || 'Turbo Call SG Cocoa 4 490', isin: p.isin || 'DE000FG0R9U0', direction: 'LONG' } : { kind: v } })} />
           {isTurbo(p) && (
             <>
               <div className="form-grid">
