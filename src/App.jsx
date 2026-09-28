@@ -12,6 +12,7 @@ import { WarRoom } from './pages/WarRoom.jsx';
 import { Market } from './pages/Market.jsx';
 import { Fundamentals } from './pages/Fundamentals.jsx';
 import { Intel, NewsDetail } from './pages/Intel.jsx';
+import { BriefSheet } from './components/BriefSheet.jsx';
 import { Trade } from './pages/Trade.jsx';
 import { usePolling } from './hooks/usePolling.js';
 import { useLongPress } from './hooks/useLongPress.js';
@@ -160,7 +161,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   const shown = sheet || lastSheet.current;
 
   const ctx = {
-    fund,
+    fund, news,
     market, marketState: ny, intraday: intraday.data, daily, fx, pulse, war, atr14, trade, tradeState: st, mutate,
     position, tradePrice, eurPerUnit, alerts, lastVisit: lastVisit.current, go, openSheet: setSheet,
   };
@@ -194,6 +195,7 @@ function Room({ onUnauthorized, onDbMissing }) {
         {shown?.type === 'pulse' && <PulseDetail pulse={pulse} />}
         {shown?.type === 'alert' && <AlertDetail alert={shown.alert} />}
         {shown?.type === 'news' && <NewsDetail event={shown.event} />}
+        {shown?.type === 'brief' && sheet && <BriefSheet {...ctx} />}
       </Sheet>
 
       <Takeover alert={critical} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />

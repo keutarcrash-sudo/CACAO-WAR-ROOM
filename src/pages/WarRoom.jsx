@@ -20,7 +20,7 @@ const TEAM = [
   { name: 'Weather Analyst', state: 'on', note: 'Pluie des zones cacao vs normale, ENSO (Open-Meteo, NOAA)' },
   { name: 'Positioning Analyst', state: 'on', note: 'Fonds et commerciaux, percentile sur 3 ans (CFTC)' },
   { name: 'Agricultural / Supply Analyst', state: 'part', note: 'Production, stocks, arrivages, grindings : saisie avec source' },
-  { name: 'AI Research Assistant', state: 'off', note: 'Phase 8 · synthèse, contradictions' },
+  { name: 'AI Research Assistant', state: 'part', note: 'Brief gratuit à coller dans l’IA de ton choix' },
 ];
 
 export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
@@ -66,6 +66,12 @@ export function WarRoom({ fund, market, marketState, intraday, daily, pulse, war
         { k: 'Timing', v: 'Attendre', color: 'var(--watch)' },
         { k: 'Confluence', v: 'N/D' },
       ]} />
+
+      <button className="glass surface-2 brief-cta tappable" onClick={() => openSheet({ type: 'brief' })}>
+        <span className="brief-ico" aria-hidden="true">✦</span>
+        <span className="row-main">Demander un avis à une IA<small>Brief gratuit à copier dans Claude, ChatGPT ou autre : toutes les données, avec leurs sources</small></span>
+        <span className="faint" aria-hidden="true">›</span>
+      </button>
 
       <WhatChanged lastVisit={lastVisit} changes={changes} />
 
