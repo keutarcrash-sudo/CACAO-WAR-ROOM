@@ -33,7 +33,8 @@ export default function App() {
   if (!a.authenticated || gate === 'login') {
     return <><Field energy={0.2} /><Login onDone={async pw => { await api.login(pw); setGate(null); await auth.reload(); }} /></>;
   }
-  return <Room onUnauthorized={() => setGate('login')} onDbMissing={() => setGate('db')} />;
+  if (gate?.startsWith?.('db:')) return <><Field energy={0.2} /><Setup missing={['la base de données']} detail={gate.slice(3)} /></>;
+  return <Room onUnauthorized={() => setGate('login')} onDbMissing={msg => setGate(msg ? `db:${msg}` : 'db')} />;
 }
 
 function Room({ onUnauthorized, onDbMissing }) {
@@ -55,6 +56,7 @@ function Room({ onUnauthorized, onDbMissing }) {
     for (const e of [ny.error, st.error, fx.error]) {
       if (e?.status === 401) onUnauthorized();
       if (e?.code === 'DB_NOT_CONFIGURED') onDbMissing();
+      if (e?.code === 'DB_UNREACHABLE') onDbMissing(e.message);
     }
   }, [ny.error, st.error, fx.error, onUnauthorized, onDbMissing]);
 
@@ -170,7 +172,7 @@ function Room({ onUnauthorized, onDbMissing }) {
           </span>
         </header>
         <main className="view">
-          {!trade && st.loading ? <p className="empty center">Chargement…</p> : (
+          {!trade ? <p className="empty center">{st.error ? `Impossible de charger les données : ${st.error.message}` : 'Chargement…'}</p> : (
             <>
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}

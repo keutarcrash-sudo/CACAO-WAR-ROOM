@@ -24,13 +24,13 @@ export function Login({ onDone }) {
 }
 
 // Shown when the server is missing its settings: says exactly what to add and where.
-export function Setup({ missing }) {
+export function Setup({ missing, detail }) {
   return (
     <main className="gate">
       <Brand large />
       <section className="surface-3 gate-setup">
         <h1>Configuration à terminer</h1>
-        <p>Il manque {missing.join(' et ')} dans les variables d’environnement Vercel.</p>
+        {detail ? <p className="msg bad">{detail}</p> : <p>Il manque {missing.join(' et ')} dans les variables d’environnement Vercel.</p>}
         <ol>
           <li>Vercel → ton projet → <b>Settings → Environment Variables</b>.</li>
           {missing.includes('la base de données') && <li><b>DATABASE_URL</b> : Supabase → <b>Connect</b> → <i>Transaction pooler</i> → copie l’adresse et remplace <code>[YOUR-PASSWORD]</code> par le mot de passe de la base.</li>}
