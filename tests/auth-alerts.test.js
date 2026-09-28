@@ -8,6 +8,10 @@ describe('session', () => {
     expect(checkPassword('cacao')).toBe(true);
     expect(checkPassword('nope')).toBe(false);
     expect(checkPassword(undefined)).toBe(false);
+    expect(checkPassword(' cacao\n')).toBe(true);
+    process.env.APP_PASSWORD = 'cacao \n';
+    expect(checkPassword('cacao')).toBe(true);
+    expect(checkPassword('Cacao')).toBe(false);
   });
   it('signs and verifies tokens', () => {
     const t = createToken();

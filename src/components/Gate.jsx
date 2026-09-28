@@ -3,6 +3,7 @@ import { Brand } from './Brand.jsx';
 
 export function Login({ onDone }) {
   const [pw, setPw] = useState('');
+  const [show, setShow] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async e => {
@@ -15,7 +16,10 @@ export function Login({ onDone }) {
       <Brand large />
       <form className="gate-form surface-3" onSubmit={submit}>
         <label htmlFor="pw" className="eyebrow">Mot de passe</label>
-        <input id="pw" type="password" autoComplete="current-password" value={pw} onChange={e => setPw(e.target.value)} autoFocus />
+        <div className="pw-row">
+          <input id="pw" type={show ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={pw} onChange={e => setPw(e.target.value)} autoFocus />
+          <button type="button" className="link" onClick={() => setShow(!show)} aria-pressed={show}>{show ? 'Masquer' : 'Afficher'}</button>
+        </div>
         {err && <p className="msg bad">{err}</p>}
         <button className="btn primary" disabled={!pw || busy}>{busy ? 'Connexion…' : 'Entrer'}</button>
       </form>

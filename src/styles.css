@@ -450,3 +450,5 @@ a { color: var(--data); }
   .hero-main { transform: none; opacity: 1; }
   .story-step { opacity: 1; transform: none; }
 }
+.pw-row { display: flex; gap: 8px; align-items: center; }
+.pw-row input { flex: 1; }
