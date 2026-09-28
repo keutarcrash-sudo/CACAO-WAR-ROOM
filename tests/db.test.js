@@ -23,7 +23,18 @@ afterAll(async () => { await sql?.end(); await server?.stop(); await pg?.close()
 describe('schema', () => {
   it('records the migration once', async () => {
     const v = await sql`select version from schema_version`;
-    expect(v.map(r => r.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(v.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe('login failures', () => {
+  it('counts failed attempts per address and in total, over a window', async () => {
+    await repo.addLoginFailure(sql, '1.1.1.1');
+    await repo.addLoginFailure(sql, '1.1.1.1');
+    await repo.addLoginFailure(sql, '2.2.2.2');
+    expect(await repo.loginFailures(sql, '1.1.1.1', 15 * 60e3)).toEqual({ total: 3, ip: 2 });
+    await sql`update login_failures set at = now() - interval '20 minutes' where ip = '1.1.1.1'`;
+    expect(await repo.loginFailures(sql, '1.1.1.1', 15 * 60e3)).toEqual({ total: 1, ip: 0 });
   });
 });
 
