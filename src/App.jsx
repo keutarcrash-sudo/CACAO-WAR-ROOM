@@ -8,6 +8,7 @@ import { AlertDetail } from './components/Timeline.jsx';
 import { Takeover } from './components/Takeover.jsx';
 import { Login, Setup } from './components/Gate.jsx';
 import { Brand } from './components/Brand.jsx';
+import { Entry } from './components/Entry.jsx';
 import { WarRoom } from './pages/WarRoom.jsx';
 import { Market } from './pages/Market.jsx';
 import { Fundamentals } from './pages/Fundamentals.jsx';
@@ -22,18 +23,32 @@ import { marketPulse, evaluateWarRoom } from '../lib/engines/warroom.js';
 import { atr } from '../lib/engines/technical.js';
 import { computePosition } from '../lib/engines/trade.js';
 
+// Back from the background after this long: the password is asked again.
+const LOCK_AFTER = 5 * 60e3;
+
 export default function App() {
   const auth = usePolling(api.auth, 24 * 3600e3);
   const [gate, setGate] = useState(null); // forced state after a 401 / 503 from another route
+  // the password is asked at every opening, even with a valid session cookie
+  const [unlocked, setUnlocked] = useState(false);
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = () => {
+      if (document.hidden) hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > LOCK_AFTER) setUnlocked(false);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
-  if (auth.loading && !auth.data) return <><Field energy={0.2} /><main className="gate"><Brand large /></main></>;
+  if (auth.loading && !auth.data) return <><Field energy={0.2} /><main className="gate"><Brand large state="live" /></main></>;
   const a = auth.data;
   const missing = [];
   if (a && !a.configured) missing.push('le mot de passe');
   if ((a && !a.database) || gate === 'db') missing.push('la base de données');
   if (auth.error || missing.length) return <><Field energy={0.2} /><Setup missing={missing.length ? missing : ['la configuration du serveur']} /></>;
-  if (!a.authenticated || gate === 'login') {
-    return <><Field energy={0.2} /><Login onDone={async pw => { await api.login(pw); setGate(null); await auth.reload(); }} /></>;
+  if (!unlocked || !a.authenticated || gate === 'login') {
+    return <><Field energy={0.2} /><Login onDone={async pw => { await api.login(pw); await auth.reload(); setGate(null); setUnlocked(true); }} /></>;
   }
   if (gate && typeof gate === 'object') return <><Field energy={0.2} /><Setup missing={['la base de données']} detail={gate.message} tech={gate.details} /></>;
   return <Room onUnauthorized={() => setGate('login')} onDbMissing={(message, details) => setGate(message ? { message, details } : 'db')} />;
@@ -46,6 +61,8 @@ function Room({ onUnauthorized, onDbMissing }) {
   });
   const [sheet, setSheet] = useState(null);
   const [burst, setBurst] = useState(0);
+  const [entered, setEntered] = useState(false);
+  const enter = useCallback(() => setEntered(true), []);
   const tip = useLongPress();
 
   const ny = usePolling(() => api.market('NY_COCOA', 'D1'), 60e3);
@@ -176,7 +193,7 @@ function Room({ onUnauthorized, onDbMissing }) {
   return (
     <>
       <Field energy={pulse.value == null ? 0.25 : pulse.value / 100} burst={burst} />
-      <div className="app">
+      <div className={`app ${entered ? '' : 'pre-entry'}`}>
         <header className="top">
           <Brand sub={tab === 'warroom' ? null : TABS.find(t => t.id === tab)?.label} state={market?.status === 'OK' ? 'live' : market?.status === 'OFFLINE' ? 'off' : undefined} level={pulse.level} />
           <span className={`live live-${market?.status === 'OK' ? 'on' : 'off'}`}>
@@ -184,7 +201,7 @@ function Room({ onUnauthorized, onDbMissing }) {
           </span>
         </header>
         <main className="view">
-          {!trade ? <p className="empty center">{st.error ? `Impossible de charger les données : ${st.error.message}` : 'Chargement…'}</p> : (
+          {!trade ? (st.error ? <p className="empty center">Impossible de charger les données : {st.error.message}</p> : null) : (
             <>
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}
@@ -206,7 +223,17 @@ function Room({ onUnauthorized, onDbMissing }) {
         {shown?.type === 'confluence' && <ConfluenceDetail analysis={analysis.data} direction={trade?.product.direction} />}
       </Sheet>
 
-      <Takeover alert={critical} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />
+      {/* entry sequence: stays mounted until its rings have opened, then renders nothing */}
+      <Entry onOpen={enter} checks={[
+        { k: 'Identité vérifiée', ok: true, required: true },
+        { k: 'Cours New York (ICE)', ok: !!ny.data || !!ny.error, error: !ny.data && !!ny.error, required: true },
+        { k: 'Ton plan et ta position', ok: !!st.data || !!st.error, error: !st.data && !!st.error, required: true },
+        { k: 'Analyse technique', ok: !!analysis.data || !!analysis.error, error: !analysis.data && !!analysis.error },
+        { k: 'Fondamentaux et météo', ok: !!fund.data || !!fund.error, error: !fund.data && !!fund.error },
+        { k: 'News', ok: !!news.data || !!news.error, error: !news.data && !!news.error },
+      ]} />
+
+      <Takeover alert={entered ? critical : null} onLater={() => ack(critical.id)} onReview={() => { ack(critical.id); go(critical.category === 'RISK' || critical.category === 'TRADE' ? 'trade' : 'market'); }} />
 
       {tip && <div className="tip" role="tooltip" style={{ left: tip.x, top: tip.y }}><b>{tip.title}</b>{tip.text}</div>}
     </>

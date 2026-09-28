@@ -13,7 +13,7 @@ export function Login({ onDone }) {
   };
   return (
     <main className="gate">
-      <Brand large />
+      <Brand large state="live" />
       <form className="gate-form surface-3" onSubmit={submit}>
         <label htmlFor="pw" className="eyebrow">Mot de passe</label>
         <div className="pw-row">

@@ -562,3 +562,38 @@ a { color: var(--data); }
 .quote { margin: 0; padding: 8px 12px; border-left: 2px solid var(--hair-2); font-size: 13.5px; color: var(--ink-2); font-style: italic; }
 .sizing .msg { margin: 0; }
 .sizing .link { margin-left: 6px; padding: 0 4px; }
+
+/* ---------- Entry sequence (after the password) ---------- */
+.entry { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 42%, rgba(12, 22, 34, .94), rgba(6, 9, 16, .985) 70%);
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  transition: opacity .75s var(--ease) .25s; }
+.entry-core { display: grid; justify-items: center; gap: 22px; }
+.entry-radar { position: relative; width: 132px; height: 132px; display: grid; place-items: center; }
+.entry-mark { width: 132px; height: 132px; filter: drop-shadow(0 0 26px rgba(98, 198, 222, .28));
+  animation: entryIn .8s var(--ease) both; transition: transform .8s var(--ease), opacity .6s var(--ease); }
+.entry-wave { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(98, 198, 222, .4); opacity: 0; animation: entryWave 2.1s var(--ease) infinite; }
+.entry-wave.w2 { animation-delay: .7s; }
+.entry-wave.w3 { animation-delay: 1.4s; }
+.entry-title { margin: 0; letter-spacing: .3em; color: var(--data); transition: opacity .3s var(--ease); }
+.entry-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; width: 260px; font: 12px var(--mono); transition: opacity .3s var(--ease); }
+.entry-checks li { display: grid; grid-template-columns: 8px 1fr auto; gap: 12px; align-items: center; color: var(--ink-3); opacity: 0;
+  animation: entryLine .5s var(--ease) forwards; animation-delay: calc(300ms + var(--d)); transition: color .3s var(--ease); }
+.entry-checks li.ok { color: var(--ink-2); }
+.entry-dot { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--ink-3); transition: all .3s var(--ease); }
+.entry-checks li.ok .entry-dot { background: var(--data); border-color: var(--data); box-shadow: 0 0 10px var(--data); }
+.entry-state { color: var(--ink-4); }
+.entry-checks li.ok .entry-state { color: var(--data); }
+/* opening: the waves rush outward, the radar lifts, the overlay dissolves onto the dashboard */
+.entry-open { opacity: 0; pointer-events: none; }
+.entry-open .entry-title, .entry-open .entry-checks { opacity: 0; }
+.entry-open .entry-mark { transform: scale(1.7); opacity: 0; }
+.entry-open .entry-wave { animation: entryBurst .9s var(--ease) forwards; }
+.entry-open .entry-wave.w2 { animation-delay: .06s; }
+.entry-open .entry-wave.w3 { animation-delay: .12s; }
+@keyframes entryIn { from { transform: scale(.7) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes entryWave { 0% { transform: scale(.6); opacity: 0; } 15% { opacity: .6; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes entryBurst { from { transform: scale(1); opacity: .9; } to { transform: scale(10); opacity: 0; } }
+@keyframes entryLine { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.app .view, .app .top { transition: opacity .9s var(--ease), transform 1s var(--ease), filter .9s var(--ease); }
+.pre-entry .view, .pre-entry .top { opacity: 0; transform: scale(.965); filter: blur(8px); }
