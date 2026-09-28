@@ -28,7 +28,7 @@ export function Login({ onDone }) {
 }
 
 // Shown when the server is missing its settings: says exactly what to add and where.
-export function Setup({ missing, detail }) {
+export function Setup({ missing, detail, tech }) {
   return (
     <main className="gate">
       <Brand large />
@@ -42,6 +42,15 @@ export function Setup({ missing, detail }) {
           <li>Onglet <b>Deployments</b> → <b>Redeploy</b>.</li>
         </ol>
         <p className="fine">Les tables sont créées automatiquement au premier lancement.</p>
+        <button className="btn block" onClick={() => location.reload()}>Réessayer</button>
+        {tech && (
+          <details className="tech" open>
+            <summary>Détails techniques (sans le mot de passe)</summary>
+            <dl>
+              {Object.entries(tech).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}
+            </dl>
+          </details>
+        )}
       </section>
     </main>
   );
