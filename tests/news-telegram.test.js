@@ -57,3 +57,15 @@ describe('telegram anti-spam', () => {
     expect(s).toContain('rien à faire');
   });
 });
+
+import { dueSummary } from '../lib/services/monitor.js';
+describe('telegram summaries', () => {
+  const at = h => new Date(Date.UTC(2026, 8, 28, h - 2, 5)); // Paris = UTC+2 in September
+  it('are off by default and sent once per slot and day', () => {
+    expect(dueSummary(null, {}, at(8))).toBeNull();
+    expect(dueSummary({ morning: true }, {}, at(8))).toEqual({ slot: 'morning', day: '2026-09-28' });
+    expect(dueSummary({ morning: true }, { morning: '2026-09-28' }, at(9))).toBeNull();
+    expect(dueSummary({ morning: true, evening: true }, {}, at(14))).toBeNull();
+    expect(dueSummary({ evening: true }, {}, at(18))?.slot).toBe('evening');
+  });
+});

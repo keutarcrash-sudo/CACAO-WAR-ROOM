@@ -2,25 +2,12 @@ import { db } from '../lib/db/client.js';
 import * as repo from '../lib/db/repo.js';
 import * as tg from '../lib/telegram/client.js';
 import { statusMessage, listMessage, HELP } from '../lib/telegram/messages.js';
-import { marketWithEvents, getRates } from '../lib/services/market.js';
 import { loadFundamentals } from '../lib/services/fundamentals.js';
-import { computePosition } from '../lib/engines/trade.js';
-import { runAnalysis } from '../lib/services/analysis.js';
-import { cached } from '../lib/http/respond.js';
+import { snapshot } from '../lib/services/snapshot.js';
 import { guarded, query, readJson, send } from '../lib/http/respond.js';
 import { isAuthenticated } from '../lib/auth/session.js';
 
 const esc = tg.esc;
-
-async function snapshot(sql) {
-  const [market, fund, trade, fx] = await Promise.all([
-    marketWithEvents('NY_COCOA', 'D1'), loadFundamentals(sql).catch(() => null), repo.getActiveTrade(sql), getRates().catch(() => null),
-  ]);
-  const price = trade.priceSource === 'manual' ? trade.manualPrice?.price ?? null : market.quote?.price ?? null;
-  const position = computePosition({ ...trade, price, eurPerUnit: fx?.eurPer?.[trade.product.priceCurrency] ?? null });
-  const war = (await cached('analysis', 60e3, () => runAnalysis(sql, { fund }))).setup;
-  return { market, fund, trade, position, war };
-}
 
 async function answer(sql, text) {
   const cmd = (text || '').trim().split(/\s|@/)[0].toLowerCase();
@@ -92,6 +79,9 @@ export default guarded(async (req, res) => {
       await tg.sendMessage('✅ <b>Cocoa War Room</b> est connecté. Seules les alertes critiques t’arriveront ici.');
     } else if (action === 'silent' || action === 'resume') {
       await repo.setSetting(sql, 'telegram_silent', action === 'silent');
+    } else if (action === 'summaries') {
+      const q = query(req);
+      await repo.setSetting(sql, 'telegram_summaries', { morning: q.get('morning') === '1', evening: q.get('evening') === '1' });
     }
   } catch (e) { error = String(e.message || e); }
   let webhook = null, bot = null;
@@ -103,6 +93,7 @@ export default guarded(async (req, res) => {
     tokenSet: tg.configured(), chatIdSet: !!tg.chatId(), bot: bot ? bot.username : null,
     webhookSet: !!webhook?.url && webhook.url.includes('/api/telegram'), webhookError: webhook?.last_error_message || null,
     silent: await repo.getSetting(sql, 'telegram_silent', false),
+    summaries: await repo.getSetting(sql, 'telegram_summaries', { morning: false, evening: false }),
     recent: (await repo.recentNotifications(sql)).slice(0, 10),
   });
 }, { auth: false });

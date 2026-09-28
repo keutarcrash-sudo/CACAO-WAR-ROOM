@@ -28,6 +28,9 @@ Web app personnelle de surveillance et de pilotage d'un trade spéculatif sur le
 | ICT / SMC | ✅ Par unité de temps (W1 → 15M) : BOS / CHoCH, sweeps, equal highs / lows, FVG, order blocks, displacement, rejets, volume inhabituel. Règles sur les bougies, sans IA |
 | Confluence et statut | ✅ Score sur 15 (long et short) avec preuves, règles « rien à faire », statut Aucun setup / Surveillance / En formation / Haute confluence / Invalidé, alerte Telegram sur haute confluence |
 | Analyse IA | ✅ Gratuite : brief complet à copier dans l'IA de ton choix, réponse rangée dans le journal |
+| Ce qui a changé | ✅ Prix, volatilité, P&L, statut, confluence, score fondamental, et tous les événements depuis ta dernière visite |
+| Mémoire des signaux | ✅ Chaque changement de statut gardé avec son prix, mouvement mesuré à 1, 3 et 7 jours, statistiques par statut et par confirmation |
+| Résumés Telegram | ✅ Optionnels, matin 8 h et/ou soir 18 h (heure de Paris), désactivés par défaut |
 
 Tant que la confluence et les fondamentaux ne sont pas branchés, la War Room affiche **« Aucun setup · Rien à faire »** avec ses raisons. C'est voulu.
 

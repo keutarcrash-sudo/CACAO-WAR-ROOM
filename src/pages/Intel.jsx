@@ -112,6 +112,16 @@ function TelegramCard() {
         {ready && <button className="btn" disabled={!!busy} onClick={() => act('test')}>{busy === 'test' ? 'Envoi…' : 'Envoyer un test'}</button>}
         {ready && <button className="btn" disabled={!!busy} onClick={() => act(d.silent ? 'resume' : 'silent')}>{d.silent ? '🔔 Réactiver' : '🔕 Mode silencieux'}</button>}
       </div>
+      {ready && (
+        <div className="summaries">
+          <span className="field-label">Résumés automatiques (désactivés par défaut)</span>
+          <div className="chips">
+            <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={!!d.summaries?.morning} disabled={!!busy} onClick={() => act(`summaries&morning=${d.summaries?.morning ? 0 : 1}&evening=${d.summaries?.evening ? 1 : 0}`)}><i />Matin · 8 h</button>
+            <button className="toggle" style={{ '--c': 'var(--data)' }} aria-pressed={!!d.summaries?.evening} disabled={!!busy} onClick={() => act(`summaries&morning=${d.summaries?.morning ? 1 : 0}&evening=${d.summaries?.evening ? 0 : 1}`)}><i />Soir · 18 h</button>
+          </div>
+          <p className="fine">Envoyés par la surveillance continue (à activer ci-dessous), heure de Paris.</p>
+        </div>
+      )}
       {d?.recent?.length > 0 && (
         <ul className="rows compact">
           {d.recent.map((r, i) => <li key={i}><span className="row-main">{r.family.split(':').slice(1).join(':')}<small>{hhmm(r.sentAt)} · importance {r.importance}</small></span><span className="row-side">{STATUS[r.status] || r.status}</span></li>)}
