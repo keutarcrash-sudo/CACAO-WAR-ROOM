@@ -15,7 +15,7 @@ export function Chart({ candles, levels = [], height = 320 }) {
   useEffect(() => {
     const c = createChart(box.current, {
       height,
-      layout: { background: { color: 'transparent' }, textColor: COLORS.text, fontFamily: "'Geist Mono Variable', ui-monospace, monospace", fontSize: 10, attributionLogo: false },
+      layout: { background: { color: 'transparent' }, textColor: COLORS.text, fontFamily: "'Geist Mono Variable', ui-monospace, monospace", fontSize: 10, attributionLogo: true },
       grid: { vertLines: { visible: false }, horzLines: { color: COLORS.grid } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },

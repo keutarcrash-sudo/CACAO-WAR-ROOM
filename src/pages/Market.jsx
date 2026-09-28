@@ -87,7 +87,7 @@ export function Market({ market, daily, atr14, trade, position }) {
 
       <header className="section-head"><h2>London Cocoa</h2><span className="meta">ICE Futures Europe</span></header>
       <p className="empty"><Freshness info={{ key: 'na', label: 'Indisponible' }} /><br />Aucune source gratuite fiable pour Londres. Elle sera branchée via l’API de ton courtier.</p>
-      <p className="foot">Source : {market?.source?.name || '—'}. Données différées, non officielles.</p>
+      <p className="foot">Source : {market?.source?.name || '—'}. Données différées, non officielles.<br />Graphique : <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts</a>.</p>
     </>
   );
 }
