@@ -2,13 +2,13 @@
 <defs><linearGradient id="sw" x1="512" y1="0" x2="800" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#62C6DE" stop-opacity=".05"/><stop offset="1" stop-color="#62C6DE" stop-opacity=".85"/></linearGradient>
 <radialGradient id="fade" cx="512" cy="512" r="410" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".55" stop-color="#fff" stop-opacity="1"/></radialGradient>
 <mask id="m"><rect width="1024" height="1024" fill="url(#fade)"/></mask>
-<filter id="g" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="26"/></filter></defs>
-<rect width="1024" height="1024" rx="${rx}" fill="#070A0F"/>
+<filter id="g" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="30"/></filter></defs>
+
 <path d="M512 512L512 104A408 408 0 0 1 800.5 223.5Z" fill="url(#sw)" mask="url(#m)"/>
-<circle cx="512" cy="512" r="408" fill="none" stroke="#62C6DE" stroke-width="15.600000000000001"/>
-<circle cx="512" cy="512" r="245" fill="none" stroke="#62C6DE" stroke-width="13" opacity=".9"/>
-<g transform="rotate(-39 512 515)" fill="none" stroke="#C9875A" stroke-width="18.2" stroke-linejoin="round" stroke-linecap="round">
+<circle cx="512" cy="512" r="408" fill="none" stroke="#62C6DE" stroke-width="18"/>
+<circle cx="512" cy="512" r="245" fill="none" stroke="#62C6DE" stroke-width="15" opacity=".9"/>
+<g transform="rotate(-39 512 515)" fill="none" stroke="#C9875A" stroke-width="21" stroke-linejoin="round" stroke-linecap="round">
 <path d="M512 340C580 330 620 420 612 520C606 600 560 670 516 700C470 672 418 600 412 520C404 420 444 330 512 340Z"/><path d="M512 346L516 698M470 352C440 452 452 604 516 698M556 352C588 452 580 604 516 698"/><rect x="503" y="278" width="18" height="62" rx="6"/></g>
-<circle cx="795" cy="353" r="22.57432169523594" fill="#62C6DE"/><circle cx="795" cy="353" r="35.47393409251362" fill="#62C6DE" opacity=".5" filter="url(#g)"/>
+<circle cx="795" cy="353" r="24.24871130596428" fill="#62C6DE"/><circle cx="795" cy="353" r="38.1051177665153" fill="#62C6DE" opacity=".5" filter="url(#g)"/>
 
 </svg>
