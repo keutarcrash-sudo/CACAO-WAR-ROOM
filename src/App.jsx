@@ -178,7 +178,7 @@ function Room({ onUnauthorized, onDbMissing }) {
       <Field energy={pulse.value == null ? 0.25 : pulse.value / 100} burst={burst} />
       <div className="app">
         <header className="top">
-          <Brand sub={tab === 'warroom' ? null : TABS.find(t => t.id === tab)?.label} />
+          <Brand sub={tab === 'warroom' ? null : TABS.find(t => t.id === tab)?.label} state={market?.status === 'OK' ? 'live' : market?.status === 'OFFLINE' ? 'off' : undefined} level={pulse.level} />
           <span className={`live live-${market?.status === 'OK' ? 'on' : 'off'}`}>
             <i aria-hidden="true" />{market?.status === 'OK' ? 'Live · différé' : market?.status === 'OFFLINE' ? 'Hors ligne' : '…'}
           </span>
