@@ -156,6 +156,14 @@ function season(month) {
   return 'Octobre–décembre : récolte principale en cours ; la pluie joue sur les dernières cabosses et le séchage, puis la saison sèche et l’harmattan s’installent en décembre.';
 }
 
+// the forecast's % vs normal is corrected by the model / ERA5 ratio measured on recent days
+function biasText(zones) {
+  const b = zones.map(z => z.bias).filter(x => x != null);
+  if (!b.length) return ', non recalée sur les observations';
+  const r = b.reduce((s, x) => s + x, 0) / b.length;
+  return Math.abs(r - 1) < 0.05 ? ', en accord avec les observations récentes' : `, recalée : le modèle a ${r > 1 ? 'surestimé' : 'sous-estimé'} la pluie récente d’environ ${Math.round(Math.abs(r - 1) * 100)} %, l’écart vs normale en tient compte`;
+}
+
 function driest(zones) {
   const z = zones.filter(x => x.next14 != null).sort((a, b) => a.next14 - b.next14).slice(0, 2);
   if (!z.length) return '';
@@ -174,7 +182,7 @@ function buildSteps(m, w, factors) {
     text: wf?.pct != null
       ? `Sur 30 jours, il est tombé ${num(all.rain30)} mm en moyenne pondérée, soit ${p0(wf.pct)} par rapport à la normale ${w.normalYears}.${ranked.length ? ` Zone la ${ranked[0].past30 < 0 ? 'plus sèche' : 'moins arrosée'} : ${ranked[0].name} (${p0(ranked[0].past30)}). La plus humide : ${ranked.at(-1).name} (${p0(ranked.at(-1).past30)}).` : ''}${pending}`
       : `Pluie observée sur 30 jours : ${num(all.rain30)} mm en moyenne pondérée. La comparaison à la normale ${w.normalYears} arrive dès que les normales sont calculées.${pending}`,
-    foot: `${m.zones.length} zones suivies. Moyenne pondérée par le poids retenu pour chaque pays (${Object.entries(m.countries).map(([, c]) => `${c.name} ${Math.round(c.weight * 100)} %`).join(', ')}).`,
+    foot: `${w.method === 'era5' ? 'Pluie passée : réanalyse ERA5, la même source que les normales (environ 5 jours de retard ; les derniers jours viennent du modèle). ' : 'Pluie passée : analyse du modèle de prévision, comparée à des normales ERA5 : l’écart peut être en partie un biais de source. '}${m.zones.length} zones suivies. Moyenne pondérée par le poids retenu pour chaque pays (${Object.entries(m.countries).map(([, c]) => `${c.name} ${Math.round(c.weight * 100)} %`).join(', ')}).`,
   });
 
   for (const [id, c] of Object.entries(m.countries)) {
@@ -200,7 +208,7 @@ function buildSteps(m, w, factors) {
     text: w.next14 != null
       ? `Les modèles prévoient ${num(all.rain14)} mm sur 14 jours en moyenne pondérée, soit ${p0(w.next14)} vs normale. ${driest(m.zones)}`
       : `Les modèles prévoient ${num(all.rain14)} mm sur 14 jours en moyenne pondérée.`,
-    foot: 'Prévision Open-Meteo (modèles numériques). Au-delà de 7 à 10 jours, elle devient peu fiable : les barres s’estompent avec l’échéance.',
+    foot: `Prévision Open-Meteo (modèles numériques)${biasText(m.zones)}. Au-delà de 7 à 10 jours, elle devient peu fiable : les barres s’estompent avec l’échéance.`,
   });
 
   const hs = heatOf(m.series.ALL);

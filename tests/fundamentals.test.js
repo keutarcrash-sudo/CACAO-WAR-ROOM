@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseOni, parseWeekly, summarizeEnso } from '../lib/providers/fundamental/noaa.js';
 import { parseCot, summarizeCot } from '../lib/providers/fundamental/cftc.js';
-import { parseRecent, parseNormal, parseExtras, parseNormalExtra, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
+import { parseRecent, parseNormal, parseExtras, parseNormalExtra, calibratedAnomalies, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
 import { weatherFactor, ensoFactor, positioningFactor, manualFactor, fundamentalScore, scoreChangeEvent } from '../lib/engines/fundamentals.js';
 
 const ONI = `SEAS  YR   TOTAL   ANOM
@@ -133,5 +133,27 @@ describe('open-meteo extras', () => {
     for (let y = 2001; y <= 2002; y++) for (let d = 0; d < 365; d++) { time.push(new Date(Date.UTC(y, 0, 1 + d)).toISOString().slice(0, 10)); t.push(30 + (y - 2001)); s.push(7200); e.push(4); }
     const n = parseNormalExtra({ daily: { time, temperature_2m_max: t, sunshine_duration: s, et0_fao_evapotranspiration: e } });
     expect(n['03-15']).toEqual({ tmax: 30.5, sun: 2, et0: 4 });
+  });
+});
+
+describe('weather anomalies measured like for like', () => {
+  const normal = Object.fromEntries(Array.from({ length: 365 }, (_, i) => [new Date(Date.UTC(2021, 0, 1 + i)).toISOString().slice(5, 10), 5]));
+  const day = i => new Date(Date.UTC(2026, 8, 28 + i)).toISOString().slice(0, 10);
+  const today = day(0);
+  // the model rains 20 % more than ERA5 on the same days
+  const series = Array.from({ length: 47 }, (_, k) => ({ date: day(k - 31), rain: 6 }));
+  const observed = Array.from({ length: 40 }, (_, k) => ({ date: day(k - 45), rain: 5 })).filter(d => d.date < day(-4));
+
+  it('uses ERA5 for the past and removes the model bias from the forecast', () => {
+    const a = calibratedAnomalies(series, observed, normal, today);
+    expect(a.method).toBe('era5');
+    expect(a.past30.pct).toBeCloseTo(0);   // ERA5 = normal
+    expect(a.bias).toBeCloseTo(1.2);
+    expect(a.next14.pct).toBeCloseTo(0);   // 6 / 1.2 = 5 = normal
+  });
+  it('falls back to the model alone, and says so, without enough ERA5 days', () => {
+    const a = calibratedAnomalies(series, observed.slice(-5), normal, today);
+    expect(a.method).toBe('model');
+    expect(a.past30.pct).toBeCloseTo(20);
   });
 });

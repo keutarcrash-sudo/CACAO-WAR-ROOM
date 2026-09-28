@@ -82,7 +82,8 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
     for (const x of f.factors) {
       L.push(`- ${x.name} : ${x.score == null ? 'non compté' : `note ${sign(x.score)}`} · ${x.value}${x.prev ? ` · ${x.prev}` : ''}${x.note ? ` · ${x.note}` : ''} · source ${x.source || 'N/D'} · fraîcheur ${x.fresh}${x.estimate ? ' · estimation' : ''}.`);
     }
-    if (f.weather?.zones) L.push('', 'Pluie 30 jours vs normale ' + (f.weather.normalYears || '') + ' : ' + f.weather.zones.map(z => `${z.name} (${z.country}) ${z.past30 == null ? 'N/D' : `${sign(Math.round(z.past30))} %`}, prévision 14 j ${z.next14 == null ? 'N/D' : `${sign(Math.round(z.next14))} %`}`).join(' ; ') + '.');
+    if (f.weather?.zones) L.push('', 'Pluie 30 jours vs normale ' + (f.weather.normalYears || '') + ' : ' + f.weather.zones.map(z => `${z.name} (${z.country}) ${z.past30 == null ? 'N/D' : `${sign(Math.round(z.past30))} %`}, prévision 14 j ${z.next14 == null ? 'N/D' : `${sign(Math.round(z.next14))} %`}`).join(' ; ') + '.'
+      + (f.weather.method === 'era5' ? ' Passé mesuré en réanalyse ERA5 (même source que les normales), prévision recalée sur l’écart modèle / ERA5 récent.' : ' Passé issu du modèle de prévision (ERA5 indisponible) : écart vs normale possiblement biaisé.'));
     if (f.enso?.oni) L.push(`ENSO (NOAA) : ${f.enso.label}, ONI ${f.enso.oni.season} ${f.enso.oni.year} ${sign(f.enso.oni.anom)} °C, Niño 3.4 hebdo ${sign(f.enso.weekly?.nino34)} °C.`);
     if (f.cot?.mmNet != null) L.push(`Positioning (CFTC, données du ${f.cot.date}) : Managed Money net ${n(f.cot.mmNet)} contrats, percentile ${f.cot.percentile} % sur ${Math.round(f.cot.weeks / 52)} ans, variation 1 semaine ${n(f.cot.change1w)}, 4 semaines ${n(f.cot.change4w)}.`);
   }
