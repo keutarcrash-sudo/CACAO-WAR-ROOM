@@ -76,3 +76,15 @@ describe('war room', () => {
     expect(whatChanged(null, { price: 1 })).toEqual([]);
   });
 });
+
+describe('what changed, full', () => {
+  it('reports status, confluence and fundamental moves', () => {
+    const rows = whatChanged(
+      { price: 100, status: 'NO_SETUP', score: 3, fund: 2, fundBias: 'NEUTRAL' },
+      { price: 100, status: 'DEVELOPING', score: 9, fund: 5, fundBias: 'BULLISH' },
+    );
+    expect(rows.map(r => r.k)).toEqual(['status', 'conf', 'fund']);
+    expect(rows[0]).toMatchObject({ v: 2, kind: 'dir' });
+    expect(rows[2].s).toContain('BULLISH');
+  });
+});

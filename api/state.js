@@ -16,8 +16,8 @@ export default guarded(async (req, res) => {
   const body = await readJson(req);
   if (body.action === 'visit') {
     const s = body.snapshot || {};
-    const clean = Object.fromEntries(['price', 'atr', 'pnl'].map(k => [k, Number.isFinite(s[k]) ? s[k] : null]));
-    clean.sourceStatus = typeof s.sourceStatus === 'string' ? s.sourceStatus.slice(0, 20) : null;
+    const clean = Object.fromEntries(['price', 'atr', 'pnl', 'score', 'fund'].map(k => [k, Number.isFinite(s[k]) ? s[k] : null]));
+    for (const k of ['sourceStatus', 'status', 'fundBias']) clean[k] = typeof s[k] === 'string' ? s[k].slice(0, 20) : null;
     clean.at = Date.now();
     if (clean.price != null) await repo.setSetting(sql, 'last_visit', clean);
     return send(res, 200, { status: 'OK' });

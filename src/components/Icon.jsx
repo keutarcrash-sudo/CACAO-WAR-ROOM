@@ -10,6 +10,12 @@ const P = {
   RISK: <><path d="M8 2 15 14H1L8 2Z" /><path d="M8 6.5v3.5" /><circle cx="8" cy="12" r=".4" /></>,
   TRADE: <><path d="M2 13.5h12" /><path d="M3 11l3-3 2.5 2 4.5-5.5" /></>,
   SYSTEM: <><circle cx="8" cy="10" r="1.3" /><path d="M5 7.2a4 4 0 0 1 6 0M3 5a7 7 0 0 1 10 0" /></>,
+  status: <><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5a5.5 5.5 0 0 1 0 11Z" fill="currentColor" stroke="none" /></>,
+  conf: <><circle cx="6" cy="8" r="4" /><circle cx="10" cy="8" r="4" /></>,
+  fund: <><ellipse cx="8" cy="8" rx="3.8" ry="6" /><path d="M8 2v12" /></>,
+  NEWS: <><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M5 6h6M5 8.5h6M5 11h3.5" /></>,
+  FUNDAMENTALS: <><ellipse cx="8" cy="8" rx="3.8" ry="6" /><path d="M8 2v12" /></>,
+  SETUP: <><circle cx="6" cy="8" r="4" /><circle cx="10" cy="8" r="4" /></>,
   check: <path d="M3 8.5 6.5 12 13 4.5" />,
   close: <path d="M4 4l8 8M12 4 4 12" />,
 };

@@ -35,7 +35,9 @@ const TEAM = [
 export function WarRoom({ fund, analysis, market, marketState, intraday, daily, pulse, war, atr14, position, trade, alerts, lastVisit, openSheet, go }) {
   const q = market?.quote;
   const up = (q?.changePct ?? 0) >= 0;
-  const changes = whatChanged(lastVisit, { price: q?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null });
+  const fs = fund.data?.score;
+  const changes = whatChanged(lastVisit, { price: q?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null, status: war.status, score: war.score ?? null, fund: fs?.total ?? null, fundBias: fs?.bias ?? null });
+  const since = lastVisit ? alerts.filter(a => a.at > lastVisit.at) : [];
   const hero = useRef(null);
 
   // light parallax: the price drifts a little slower than the page
@@ -84,7 +86,7 @@ export function WarRoom({ fund, analysis, market, marketState, intraday, daily, 
         <span className="faint" aria-hidden="true">›</span>
       </button>
 
-      <WhatChanged lastVisit={lastVisit} changes={changes} />
+      <WhatChanged lastVisit={lastVisit} changes={changes} events={since} onOpen={a => openSheet({ type: 'alert', alert: a })} />
 
       <Thesis fund={fund} trade={trade} go={go} />
 

@@ -90,7 +90,7 @@ function Room({ onUnauthorized, onDbMissing }) {
 
   // save "this visit" when the page is hidden, for the next "what changed"
   const snap = useRef(null);
-  snap.current = { price: market?.quote?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null };
+  snap.current = { price: market?.quote?.price ?? null, atr: atr14, pnl: position.pnl ?? null, sourceStatus: market?.status ?? null, status: war.status, score: war.score ?? null, fund: fundScore?.total ?? null, fundBias: fundScore?.bias ?? null };
   useEffect(() => {
     const save = () => { if (snap.current.price != null) sendVisit(snap.current); };
     const onVis = () => document.hidden && save();

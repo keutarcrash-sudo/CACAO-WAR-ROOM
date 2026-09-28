@@ -541,3 +541,4 @@ a { color: var(--data); }
 .price-now { display: flex; justify-content: space-between; align-items: baseline; margin: 6px -10px; padding: 10px; border-radius: 12px; background: linear-gradient(90deg, rgba(98, 198, 222, .12), transparent); font-size: 14px; }
 .price-now b { font-weight: 500; }
 .tf-strip small { display: block; font: 11px var(--mono); margin-top: 2px; }
+.changed-sub { margin: 16px 0 4px; font-size: 12.5px; color: var(--ink-3); }
