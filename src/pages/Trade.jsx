@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Num } from '../components/Num.jsx';
 import { Freshness } from '../components/Freshness.jsx';
 import { usePolling } from '../hooks/usePolling.js';
@@ -325,7 +325,11 @@ function Settings({ trade, mutate, fx }) {
   const act = useAction(mutate);
   const p = trade.product;
   const save = patch => act.run('settings', patch).catch(() => {});
-  const [tb, setTb] = useState({ name: p.name ?? '', isin: p.isin ?? '', strike: p.strike ?? '', barrier: p.barrier ?? '', parity: p.parity ?? 100, confirmed: !!p.confirmed });
+  const fromProduct = () => ({ name: p.name ?? '', isin: p.isin ?? '', strike: p.strike ?? '', barrier: p.barrier ?? '', parity: p.parity ?? 100, confirmed: !!p.confirmed });
+  const [tb, setTb] = useState(fromProduct);
+  // follow the saved product (e.g. right after switching to Turbo, the preset values arrive from the server)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setTb(fromProduct()), [p.kind, p.name, p.isin, p.strike, p.barrier, p.parity, p.confirmed]);
   return (
     <section>
       <header className="section-head"><h2>Produit et plan</h2><button className="link" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Masquer' : 'Modifier'}</button></header>

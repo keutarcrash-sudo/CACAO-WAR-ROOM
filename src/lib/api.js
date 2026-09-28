@@ -4,11 +4,17 @@ export class ApiError extends Error {
 }
 
 async function call(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // the browser's own message ("Load failed", "Failed to fetch") says nothing useful
+    throw new ApiError(0, { error: 'Le serveur n’a pas répondu (réseau coupé, ou mise à jour de l’app en cours). Réessaie dans un instant.' });
+  }
   let data = null;
   try { data = await res.json(); } catch { /* empty body */ }
   if (!res.ok) throw new ApiError(res.status, data);
