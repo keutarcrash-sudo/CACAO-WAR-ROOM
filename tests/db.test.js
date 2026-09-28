@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
-import { connect, migrate } from '../lib/db/client.js';
+import { connect, migrate, parseDatabaseUrl } from '../lib/db/client.js';
 import * as repo from '../lib/db/repo.js';
 import { runAction } from '../lib/services/trade.js';
 
@@ -109,5 +109,23 @@ describe('alerts and market', () => {
     await repo.setSetting(sql, 'last_visit', { price: 1 });
     await repo.setSetting(sql, 'last_visit', { price: 2 });
     expect(await repo.getSetting(sql, 'last_visit')).toEqual({ price: 2 });
+  });
+});
+
+describe('DATABASE_URL parsing', () => {
+  const base = 'postgres.abc:PASS@aws-0-eu-central-1.pooler.supabase.com:6543/postgres';
+  const pw = u => parseDatabaseUrl(`postgresql://${u}`).password;
+  it('reads a normal Supabase pooler URL', () => {
+    expect(parseDatabaseUrl(`postgresql://${base}`)).toEqual({ host: 'aws-0-eu-central-1.pooler.supabase.com', port: 6543, database: 'postgres', username: 'postgres.abc', password: 'PASS' });
+  });
+  it('tolerates brackets, raw special characters, encoding and spaces', () => {
+    expect(pw(base.replace('PASS', '[Secret42]'))).toBe('Secret42');
+    expect(pw(base.replace('PASS', 'a@b#c/d?e'))).toBe('a@b#c/d?e');
+    expect(pw(base.replace('PASS', 'a%40b'))).toBe('a@b');
+    expect(pw(base.replace('PASS', '100%sure'))).toBe('100%sure');
+    expect(parseDatabaseUrl(`  postgresql://${base}\n`).port).toBe(6543);
+  });
+  it('rejects something that is not a connection string', () => {
+    expect(() => parseDatabaseUrl('https://abc.supabase.co')).toThrow();
   });
 });
