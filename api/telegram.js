@@ -4,7 +4,7 @@ import * as tg from '../lib/telegram/client.js';
 import { statusMessage, listMessage, HELP } from '../lib/telegram/messages.js';
 import { loadFundamentals } from '../lib/services/fundamentals.js';
 import { snapshot } from '../lib/services/snapshot.js';
-import { guarded, query, readJson, send } from '../lib/http/respond.js';
+import { guarded, publicHost, query, readJson, send } from '../lib/http/respond.js';
 import { isAuthenticated } from '../lib/auth/session.js';
 
 const esc = tg.esc;
@@ -65,7 +65,7 @@ export default guarded(async (req, res) => {
   if (!isAuthenticated(req)) return send(res, 401, { status: 'UNAUTHORIZED' });
   const sql = await db();
   const action = query(req).get('action') || 'status';
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = publicHost(req);
   let error = null;
   try {
     if (action === 'setup') {

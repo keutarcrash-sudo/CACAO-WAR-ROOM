@@ -1,7 +1,7 @@
 import { db } from '../lib/db/client.js';
 import { getSetting, setSetting } from '../lib/db/repo.js';
 import { runMonitor, cronSecret, scheduleSql } from '../lib/services/monitor.js';
-import { guarded, query, send } from '../lib/http/respond.js';
+import { guarded, publicHost, query, send } from '../lib/http/respond.js';
 import { isAuthenticated } from '../lib/auth/session.js';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -20,7 +20,7 @@ export default guarded(async (req, res) => {
   if (!isAuthenticated(req)) return send(res, 401, { status: 'UNAUTHORIZED' });
   const sql = await db();
   const action = query(req).get('action') || 'status';
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = publicHost(req);
   const url = `https://${host}/api/cron`;
 
   if (action === 'run') {
