@@ -5,6 +5,7 @@ import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../lib/api.js';
 import { eur, money, num, pct, dateShort, hhmm } from '../lib/format.js';
 import { checkEntry } from '../../lib/engines/trade.js';
+import { SetupHistory } from '../components/SetupHistory.jsx';
 
 const parse = s => {
   if (s === '' || s == null) return null;
@@ -67,6 +68,7 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
       <Levels trade={trade} mutate={mutate} position={position} cur={cur} />
       <Entries trade={trade} mutate={mutate} eurPerUnit={eurPerUnit} cur={cur} />
       <Journal snapshot={() => ({ price: tradePrice, cur, pnl: position.pnl, status: position.status, capital: position.capital, avg: position.avg, pulse: pulse?.value ?? null })} />
+      <SetupHistory />
       <Settings trade={trade} mutate={mutate} fx={fx} />
       <DataTools trade={trade} mutate={mutate} />
       <p className="foot">Données enregistrées dans ta base Supabase. L’app ne passe aucun ordre.</p>

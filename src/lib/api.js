@@ -27,6 +27,7 @@ export const api = {
   journal: () => call('/api/journal'),
   fundamentals: () => call('/api/fundamentals'),
   analysis: () => call('/api/analysis'),
+  history: () => call('/api/analysis?history=1'),
   news: (refresh = false) => call(`/api/news${refresh ? '?refresh=1' : ''}`),
   telegram: (action = 'status') => call(`/api/telegram?action=${action}`),
   monitor: (action = 'status') => call(`/api/cron?action=${action}`),

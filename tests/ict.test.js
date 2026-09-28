@@ -111,3 +111,32 @@ describe('setup status and do nothing', () => {
     expect(evaluateSetup({ market: market(97), daily, fundamentals: { bias: 'BULLISH', total: 6 }, conf: conf(3), position: { flags: { technical: 'INVALIDATED' } } }).status).toBe('INVALIDATED');
   });
 });
+
+import { evaluateOutcome, historyStats } from '../lib/engines/history.js';
+describe('setup history', () => {
+  const D = 86400;
+  const at = Date.UTC(2026, 8, 1) ;
+  const daily = Array.from({ length: 10 }, (_, i) => ({ t: at / 1000 + (i + 1) * D - 3600, o: 100 + i, h: 102 + i, l: 99 + i, c: 101 + i }));
+  it('measures the move in the setup direction at each horizon', () => {
+    const r = evaluateOutcome({ at, price: 100, direction: 'LONG' }, daily, at + 8 * D * 1000);
+    expect(r.done).toBe(true);
+    expect(r.outcome.d1.pct).toBeCloseTo(1);
+    expect(r.outcome.d7.pct).toBeCloseTo(7);
+    expect(r.outcome.d7.worst).toBeCloseTo(-1);
+    const s = evaluateOutcome({ at, price: 100, direction: 'SHORT' }, daily, at + 8 * D * 1000);
+    expect(s.outcome.d7.pct).toBeCloseTo(-7);
+    expect(evaluateOutcome({ at, price: 100, direction: 'LONG' }, daily, at + 2 * D * 1000).done).toBe(false);
+  });
+  it('groups by status and by confirmation', () => {
+    const rows = [
+      { status: 'HIGH', items: ['sweep', 'bos'], outcome: { d7: { pct: 5 } } },
+      { status: 'HIGH', items: ['sweep'], outcome: { d7: { pct: -2 } } },
+      { status: 'WATCHING', items: ['fund'], outcome: { d7: { pct: 1 } } },
+      { status: 'DEVELOPING', items: ['bos'], outcome: null },
+    ];
+    const st = historyStats(rows, 'd7');
+    expect(st.evaluated).toBe(3);
+    expect(st.byStatus.HIGH).toMatchObject({ n: 2, avg: 1.5, hit: 0.5 });
+    expect(st.byItem[0].k).toBe('bos');
+  });
+});
