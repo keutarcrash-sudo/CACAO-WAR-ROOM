@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseOni, parseWeekly, summarizeEnso } from '../lib/providers/fundamental/noaa.js';
 import { parseCot, summarizeCot } from '../lib/providers/fundamental/cftc.js';
-import { parseRecent, parseNormal, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
+import { parseRecent, parseNormal, parseSoil, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
 import { weatherFactor, ensoFactor, positioningFactor, manualFactor, fundamentalScore, scoreChangeEvent } from '../lib/engines/fundamentals.js';
 
 const ONI = `SEAS  YR   TOTAL   ANOM
@@ -113,5 +113,15 @@ describe('fundamental score', () => {
     expect(scoreChangeEvent({ total: 7, bias: 'BULLISH' }, { total: 2, bias: 'NEUTRAL' }).level).toBe('CRITICAL');
     expect(scoreChangeEvent({ total: 5, bias: 'BULLISH' }, { total: 4, bias: 'BULLISH' }).level).toBe('INFORMATION');
     expect(scoreChangeEvent(null, { total: 4 })).toBeNull();
+  });
+});
+
+describe('open-meteo soil moisture', () => {
+  it('averages hourly values per day and skips gaps', () => {
+    const one = { hourly: { time: ['2026-09-27T00:00', '2026-09-27T12:00', '2026-09-28T00:00'], soil_moisture_9_to_27cm: [0.3, 0.2, null] } };
+    const r = parseSoil(ZONES.map(() => one));
+    expect(r[ZONES[0].id]['2026-09-27']).toBeCloseTo(0.25);
+    expect(r[ZONES[0].id]['2026-09-28']).toBeUndefined();
+    expect(() => parseSoil([one])).toThrow(/zones/);
   });
 });

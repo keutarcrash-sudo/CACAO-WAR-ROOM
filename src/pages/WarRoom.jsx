@@ -6,6 +6,7 @@ import { Sparkline } from '../components/Sparkline.jsx';
 import { StatusCore } from '../components/StatusCore.jsx';
 import { WhatChanged } from '../components/WhatChanged.jsx';
 import { MarketReading } from '../components/MarketReading.jsx';
+import { WeatherReading } from '../components/WeatherReading.jsx';
 import { Thesis } from '../components/Thesis.jsx';
 import { ConfluenceCard } from '../components/Confluence.jsx';
 import { BIAS } from './Fundamentals.jsx';
@@ -91,6 +92,8 @@ export function WarRoom({ fund, analysis, market, marketState, intraday, daily, 
       <Thesis fund={fund} trade={trade} go={go} />
 
       <MarketReading daily={daily} quote={q} atr14={atr14} trade={trade} position={position} war={war} analysis={analysis.data} />
+
+      <WeatherReading fund={fund} />
 
       <section>
         <header className="section-head"><h2>Position</h2><span className="meta">{position.status}</span></header>
