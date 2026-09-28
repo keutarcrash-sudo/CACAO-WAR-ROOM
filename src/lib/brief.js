@@ -48,6 +48,7 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
   L.push(`Structure simplifiée (deux derniers sommets et creux) : ${market ? await structures(market) : 'N/D'}.`);
   const qy = market?.quality;
   if (qy?.rebuilt) L.push(`Qualité : ${qy.rebuilt} bougie(s) Daily vide(s), incohérente(s) ou absente(s) chez Yahoo reconstruite(s) à partir des bougies 1H (marquées « 1H » ci-dessous).`);
+  if (qy?.rolls?.length) L.push(`Échéances : ${qy.rolls.map(r => `passage au contrat suivant le ${day(r.t)} (écart ${r.gap > 0 ? '+' : ''}${n(r.gap)} $)`).join(' ; ')}. L’historique antérieur est décalé de cet écart pour rester continu ; ce saut n’est pas un mouvement de marché.${q.rolledToday ? ' Le changement de séance affiché exclut ce saut.' : ''}`);
   if (qy?.unrepaired) L.push(`Qualité : ${qy.unrepaired} bougie(s) Daily incohérente(s) ou vide(s) sans données 1H pour les reconstruire (surtout anciennes), écartée(s) des calculs.`);
   L.push('London Cocoa (ICE Europe) : indisponible (pas de source gratuite fiable).');
   if (daily?.length) {
