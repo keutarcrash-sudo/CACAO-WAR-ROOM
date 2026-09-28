@@ -15,6 +15,12 @@ export function anomalyColor(p) {
   return p < 0 ? (p < -30 ? C.dryX : C.dry) : C.data;
 }
 
+// Max temperature anomaly (°C) -> colour: orange when hotter than normal, cyan when cooler.
+export function heatColor(a) {
+  if (a == null || Math.abs(a) < 0.4) return C.calm;
+  return a > 0 ? (a > 1.5 ? C.dryX : C.dry) : C.data;
+}
+
 const bboxOf = rings => {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const r of rings) for (let i = 0; i < r.length; i += 2) { x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]); y0 = Math.min(y0, r[i + 1]); y1 = Math.max(y1, r[i + 1]); }
@@ -86,8 +92,9 @@ function drawMap(ctx, W, H, m, S) {
     const p = z.past30 == null && z.next14 == null ? null : lerpNull(z.past30, z.next14, S.fc);
     const [x, y] = P(z.lon, z.lat);
     const focus = S.hl[z.country] ?? 0;
-    const r = 3.5 + clamp(Math.abs(p ?? 0) / 12, 0, 6) + focus * 1.5;
-    const col = anomalyColor(p);
+    const heat = S.heat > 0.5, ha = z.heat?.anom ?? null;
+    const r = 3.5 + (heat ? clamp(Math.abs(ha ?? 0) * 3, 0, 6) : clamp(Math.abs(p ?? 0) / 12, 0, 6)) + focus * 1.5;
+    const col = heat ? heatColor(ha) : anomalyColor(p);
     const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3.2);
     glow.addColorStop(0, rgba(col, 0.45)); glow.addColorStop(1, rgba(col, 0));
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, Math.PI * 2); ctx.fill();
@@ -114,13 +121,74 @@ function drawMap(ctx, W, H, m, S) {
   lg.addColorStop(0, rgba(C.dryX, 1)); lg.addColorStop(0.5, rgba(C.calm, 1)); lg.addColorStop(1, rgba(C.data, 1));
   ctx.fillStyle = lg; ctx.fillRect(lx, ly - 2, lw, 4);
   ctx.fillStyle = rgba(C.ink3, 1);
-  ctx.fillText(S.fc > 0.5 ? 'sec · prévision 14 j · humide' : 'sec · pluie 30 j vs normale · humide', lx + lw + 8, ly);
+  if (S.heat > 0.5) {
+    const hg = ctx.createLinearGradient(lx, 0, lx + lw, 0);
+    hg.addColorStop(0, rgba(C.data, 1)); hg.addColorStop(0.5, rgba(C.calm, 1)); hg.addColorStop(1, rgba(C.dryX, 1));
+    ctx.fillStyle = hg; ctx.fillRect(lx, ly - 2, lw, 4); ctx.fillStyle = rgba(C.ink3, 1);
+  }
+  ctx.fillText(S.heat > 0.5 ? 'frais · Tmax 30 j vs normale · chaud' : S.fc > 0.5 ? 'sec · prévision 14 j · humide' : 'sec · pluie 30 j vs normale · humide', lx + lw + 8, ly);
   ctx.restore();
 }
 
 function drawChart(ctx, X0, Y0, W, H, m, S) {
   const d = S.series;
   if (!d?.length) return;
+  const h = S.heat || 0;
+  if (h < 0.99) { ctx.save(); ctx.globalAlpha = 1 - h; drawRain(ctx, X0, Y0, W, H, d, S); ctx.restore(); }
+  if (h > 0.01) { ctx.save(); ctx.globalAlpha = h; drawHeat(ctx, X0, Y0, W, H, d); ctx.restore(); }
+}
+
+// Sunshine hours as bars against their normal, max temperature as a line with the heat-stress landmark.
+function drawHeat(ctx, X0, Y0, W, H, d) {
+  const pad = { l: 4, r: 40, t: 16, b: 16 };
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, step = iw / d.length;
+  const X = i => X0 + pad.l + i * step + step / 2;
+  const firstFc = d.findIndex(x => x.fc);
+  ctx.font = '10px "Geist Mono Variable", ui-monospace, monospace'; ctx.textBaseline = 'middle';
+  const sunMax = Math.max(8, ...d.map(k => Math.max(k.sun ?? 0, k.sunN ?? 0))) * 1.15;
+  const SY = v => Y0 + pad.t + ih - (v / sunMax) * ih;
+  for (let i = 0; i < d.length; i++) {
+    const k = d[i];
+    if (k.sun == null) continue;
+    const a = k.fc ? 0.45 * (1 - (i - firstFc) / 22) : 0.75;
+    const bw = Math.max(1.5, step * 0.62), y = SY(k.sun);
+    ctx.fillStyle = rgba(C.dry, clamp(a, 0.08, 1)); ctx.fillRect(X(i) - bw / 2, y, bw, SY(0) - y);
+  }
+  dashed(ctx, d.map((k, i) => (k.sunN == null ? null : [X(i), SY(k.sunN)])), rgba(C.ink, 0.5));
+  ctx.fillStyle = rgba(C.dry, 1); ctx.textAlign = 'left';
+  ctx.fillText(`${Math.round(sunMax / 2)} h`, X0 + W - pad.r + 6, SY(sunMax / 2));
+  // temperature on its own scale
+  const tv = d.flatMap(k => [k.tmax, k.tmaxN]).filter(v => v != null);
+  if (tv.length > 5) {
+    const lo = Math.min(...tv, 28) - 0.5, hi = Math.max(...tv, 34) + 0.5;
+    const TY = v => Y0 + pad.t + (1 - (v - lo) / (hi - lo)) * ih * 0.7;
+    const y33 = Math.round(TY(33)) + 0.5;
+    ctx.strokeStyle = rgba(C.dryX, 0.45); ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(X0 + pad.l, y33); ctx.lineTo(X0 + W - pad.r, y33); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = rgba(C.dryX, 0.9); ctx.textAlign = 'left'; ctx.fillText('33 °C', X0 + W - pad.r + 6, y33);
+    dashed(ctx, d.map((k, i) => (k.tmaxN == null ? null : [X(i), TY(k.tmaxN)])), rgba(C.dryX, 0.4));
+    ctx.strokeStyle = rgba(C.dryX, 0.95); ctx.lineWidth = 1.8; ctx.beginPath();
+    let started = false;
+    d.forEach((k, i) => { if (k.tmax == null) { started = false; return; } if (started) ctx.lineTo(X(i), TY(k.tmax)); else { ctx.moveTo(X(i), TY(k.tmax)); started = true; } });
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+  if (firstFc > 0) {
+    const x = Math.round(X0 + pad.l + firstFc * step) + 0.5;
+    ctx.strokeStyle = rgba(C.ink, 0.35); ctx.beginPath(); ctx.moveTo(x, Y0 + 4); ctx.lineTo(x, Y0 + H - pad.b); ctx.stroke();
+  }
+  ctx.fillStyle = rgba(C.ink3, 1); ctx.textAlign = 'left';
+  ctx.fillText('ligne : Tmax · barres : soleil (h) · — — normales', X0 + pad.l, Y0 + H - 4);
+}
+
+function dashed(ctx, pts, color) {
+  if (!pts.some(Boolean)) return;
+  ctx.strokeStyle = color; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.2;
+  ctx.beginPath(); let started = false;
+  for (const p of pts) { if (!p) { started = false; continue; } if (started) ctx.lineTo(p[0], p[1]); else { ctx.moveTo(p[0], p[1]); started = true; } }
+  ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+}
+
+function drawRain(ctx, X0, Y0, W, H, d, S) {
   const pad = { l: 4, r: 40, t: 16, b: 16 };
   const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, step = iw / d.length;
   const max = Math.max(8, ...d.map(x => Math.max(x.rain ?? 0, x.normal ?? 0))) * 1.1;

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseOni, parseWeekly, summarizeEnso } from '../lib/providers/fundamental/noaa.js';
 import { parseCot, summarizeCot } from '../lib/providers/fundamental/cftc.js';
-import { parseRecent, parseNormal, parseSoil, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
+import { parseRecent, parseNormal, parseExtras, parseNormalExtra, anomaly, ZONES } from '../lib/providers/fundamental/openmeteo.js';
 import { weatherFactor, ensoFactor, positioningFactor, manualFactor, fundamentalScore, scoreChangeEvent } from '../lib/engines/fundamentals.js';
 
 const ONI = `SEAS  YR   TOTAL   ANOM
@@ -116,12 +116,22 @@ describe('fundamental score', () => {
   });
 });
 
-describe('open-meteo soil moisture', () => {
-  it('averages hourly values per day and skips gaps', () => {
-    const one = { hourly: { time: ['2026-09-27T00:00', '2026-09-27T12:00', '2026-09-28T00:00'], soil_moisture_9_to_27cm: [0.3, 0.2, null] } };
-    const r = parseSoil(ZONES.map(() => one));
-    expect(r[ZONES[0].id]['2026-09-27']).toBeCloseTo(0.25);
-    expect(r[ZONES[0].id]['2026-09-28']).toBeUndefined();
-    expect(() => parseSoil([one])).toThrow(/zones/);
+describe('open-meteo extras', () => {
+  it('averages hourly soil moisture per day, converts sunshine to hours', () => {
+    const one = {
+      hourly: { time: ['2026-09-27T00:00', '2026-09-27T12:00', '2026-09-28T00:00'], soil_moisture_9_to_27cm: [0.3, 0.2, null] },
+      daily: { time: ['2026-09-27', '2026-09-28'], sunshine_duration: [18000, null], et0_fao_evapotranspiration: [3.2, 3.5] },
+    };
+    const r = parseExtras(ZONES.map(() => one))[ZONES[0].id];
+    expect(r['2026-09-27'].soil).toBeCloseTo(0.25);
+    expect(r['2026-09-27'].sun).toBe(5);
+    expect(r['2026-09-28']).toEqual({ sun: null, et0: 3.5 });
+    expect(() => parseExtras([one])).toThrow(/zones/);
+  });
+  it('builds daily normals of heat, sunshine and evapotranspiration', () => {
+    const time = [], t = [], s = [], e = [];
+    for (let y = 2001; y <= 2002; y++) for (let d = 0; d < 365; d++) { time.push(new Date(Date.UTC(y, 0, 1 + d)).toISOString().slice(0, 10)); t.push(30 + (y - 2001)); s.push(7200); e.push(4); }
+    const n = parseNormalExtra({ daily: { time, temperature_2m_max: t, sunshine_duration: s, et0_fao_evapotranspiration: e } });
+    expect(n['03-15']).toEqual({ tmax: 30.5, sun: 2, et0: 4 });
   });
 });

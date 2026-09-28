@@ -1,9 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { cameraFor, drawWeather } from '../lib/weatherStory.js';
 import { useReducedMotion } from '../hooks/useReducedMotion.js';
+import { useStoryStep } from '../hooks/useStoryStep.js';
 import { num } from '../lib/format.js';
 
 const ORDER = ['CI', 'GH', 'NG', 'CM'];
+const KEYS = ['rain', 'normal', 'soil', 'tmax', 'tmaxN', 'sun', 'sunN', 'et0', 'et0N'];
+const HOT = 33; // °C: max temperature above which cocoa trees are commonly described as heat-stressed
+
+// Heat over the last 30 observed days: mean max temperature against its normal, and hot days.
+export function heatOf(days) {
+  const obs = days.filter(d => !d.fc && d.tmax != null).slice(-30);
+  if (obs.length < 20) return null;
+  const withN = obs.filter(d => d.tmaxN != null);
+  const mean = obs.reduce((s, d) => s + d.tmax, 0) / obs.length;
+  const anom = withN.length >= 20 ? withN.reduce((s, d) => s + d.tmax - d.tmaxN, 0) / withN.length : null;
+  const next = days.filter(d => d.fc && d.tmax != null).slice(0, 14);
+  return { mean, anom, hot: obs.filter(d => d.tmax >= HOT).length, hotNext: next.filter(d => d.tmax >= HOT).length, days: obs.length };
+}
 const p0 = x => (x == null ? '—' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.round(Math.abs(x))} %`);
 
 // Same scroll storytelling as the market reading: the map stays pinned and moves from the whole
@@ -12,9 +26,9 @@ export function WeatherReading({ fund }) {
   const rm = useReducedMotion();
   const w = fund.data?.weather;
   const factors = fund.data?.factors;
-  const [active, setActive] = useState(0);
   const canvas = useRef(null);
   const steps = useRef([]);
+  const stage = useRef(null);
   const S = useRef(null);
 
   const model = useMemo(() => {
@@ -31,25 +45,18 @@ export function WeatherReading({ fund }) {
           for (const z of zs) { const v = z.days[i]?.[key]; if (v != null) { s += v * wt(z); n += wt(z); } }
           return n ? s / n : null;
         };
-        return { date: d.date, fc: d.fc, rain: avg('rain'), normal: avg('normal'), soil: avg('soil') };
+        return { date: d.date, fc: d.fc, ...Object.fromEntries(KEYS.map(k => [k, avg(k)])) };
       });
     };
     return {
-      zones: w.zones, countries,
+      zones: w.zones.map(z => ({ ...z, heat: heatOf(z.days) })), countries,
       series: { ALL: series(() => true), ...Object.fromEntries(Object.keys(countries).map(c => [c, series(z => z.country === c)])) },
     };
   }, [w]);
 
   const STEPS = useMemo(() => (model ? buildSteps(model, w, factors) : []), [model, w, factors]);
 
-  useEffect(() => {
-    const io = new IntersectionObserver(es => {
-      for (const e of es) if (e.isIntersecting) setActive(Number(e.target.dataset.i));
-    // the stage is tall: a step becomes active when it is readable, below it
-    }, { rootMargin: '-70% 0px -26% 0px' });
-    steps.current.forEach(el => el && io.observe(el));
-    return () => io.disconnect();
-  }, [STEPS.length]);
+  const active = Math.min(useStoryStep(stage, steps, STEPS.length), Math.max(0, STEPS.length - 1));
 
   useEffect(() => {
     const c = canvas.current;
@@ -64,7 +71,7 @@ export function WeatherReading({ fund }) {
     const target = ({ W, mapH }) => ({
       cam: cameraFor(step.cam, W, mapH),
       hl: Object.fromEntries(Object.keys(model.countries).map(k => [k, step.cam === k ? 1 : step.cam === 'ALL' ? 0.35 : 0])),
-      zoom: step.cam === 'ALL' ? 0 : 1, fc: step.fc ? 1 : 0, soil: step.soil ? 1 : 0,
+      zoom: step.cam === 'ALL' ? 0 : 1, fc: step.fc ? 1 : 0, soil: step.soil ? 1 : 0, heat: step.heat ? 1 : 0,
       series: model.series[step.series] || model.series.ALL,
     });
     const first = size();
@@ -79,12 +86,12 @@ export function WeatherReading({ fund }) {
       const go = (a, b) => { const d = b - a; if (Math.abs(d) > 1e-3 * Math.max(1, Math.abs(b))) moving = true; return a + d * k; };
       s.cam = { cx: go(s.cam.cx, T.cam.cx), cy: go(s.cam.cy, T.cam.cy), scale: Math.exp(go(Math.log(s.cam.scale), Math.log(T.cam.scale))) };
       for (const id of Object.keys(T.hl)) s.hl[id] = go(s.hl[id] ?? 0, T.hl[id]);
-      s.zoom = go(s.zoom, T.zoom); s.fc = go(s.fc, T.fc); s.soil = go(s.soil, T.soil);
+      s.zoom = go(s.zoom, T.zoom); s.fc = go(s.fc, T.fc); s.soil = go(s.soil, T.soil); s.heat = go(s.heat ?? 0, T.heat);
       // bars morph from one series to the next
       s.series = T.series.map((d, i) => {
         const o = s.series[i] || d;
         const mix = key => (d[key] == null ? null : o[key] == null ? d[key] : go(o[key], d[key]));
-        return { ...d, rain: mix('rain'), normal: mix('normal'), soil: mix('soil') };
+        return { ...d, ...Object.fromEntries(KEYS.map(k => [k, mix(k)])) };
       });
       paint(sz);
       raf = moving ? requestAnimationFrame(tick) : 0;
@@ -98,7 +105,7 @@ export function WeatherReading({ fund }) {
   if (!model) return null;
   return (
     <section className="story story-weather" aria-label="Lecture météo">
-      <div className="story-stage">
+      <div className="story-stage" ref={stage}>
         <div className="story-head">
           <span className="eyebrow">Lecture météo · zones de production</span>
           <span className="story-count num">{String(active + 1).padStart(2, '0')} / {String(STEPS.length).padStart(2, '0')}</span>
@@ -118,6 +125,12 @@ export function WeatherReading({ fund }) {
       </div>
     </section>
   );
+}
+
+const signC = x => `${x > 0 ? '+' : x < 0 ? '−' : ''}${num(Math.abs(x), 1)} °C`;
+function heatLine(h, long = false) {
+  if (!h) return '';
+  return `${long ? 'Température maximale' : 'Tmax'} moyenne sur 30 jours : ${num(h.mean, 1)} °C${h.anom != null ? ` (${signC(h.anom)} vs normale)` : ''}, ${h.hot} jour${h.hot > 1 ? 's' : ''} à ${HOT} °C ou plus${long ? `, ${h.hotNext} prévu${h.hotNext > 1 ? 's' : ''} sur 14 jours` : ''}.`;
 }
 
 function soilTrend(series) {
@@ -175,6 +188,7 @@ function buildSteps(m, w, factors) {
         cw ? `30 jours : ${num(s.rain30)} mm, ${p0(cw.past30)} vs normale.` : `30 jours : ${num(s.rain30)} mm.`,
         zs.length > 1 ? `Par zone : ${zs.map(z => `${z.name} ${p0(z.past30)}`).join(', ')}.` : '',
         cw?.next14 != null ? `Prévision 14 jours : ${num(s.rain14)} mm, ${p0(cw.next14)} vs normale.` : '',
+        heatLine(heatOf(m.series[id])),
         soil ? `Humidité du sol (${w.soil?.depth || '9–27 cm'}) ${soil.word} sur 10 jours : ${num(soil.now, 2)} m³/m³ contre ${num(soil.before, 2)}.` : '',
       ].filter(Boolean).join(' '),
       foot: `Poids dans le score météo : ${Math.round(c.weight * 100)} %${soil ? ' · ligne violette : humidité du sol, tendance seulement (pas de normale à cette profondeur)' : ''}.`,
@@ -188,6 +202,27 @@ function buildSteps(m, w, factors) {
       : `Les modèles prévoient ${num(all.rain14)} mm sur 14 jours en moyenne pondérée.`,
     foot: 'Prévision Open-Meteo (modèles numériques). Au-delà de 7 à 10 jours, elle devient peu fiable : les barres s’estompent avec l’échéance.',
   });
+
+  const hs = heatOf(m.series.ALL);
+  const sunObs = m.series.ALL.filter(d => !d.fc && d.sun != null).slice(-30);
+  if (hs || sunObs.length >= 20) {
+    const sun = sunObs.length >= 20 ? sunObs.reduce((t, d) => t + d.sun, 0) / sunObs.length : null;
+    const sunN = sunObs.filter(d => d.sunN != null);
+    const sunPct = sunN.length >= 20 ? (sunN.reduce((t, d) => t + d.sun, 0) / sunN.reduce((t, d) => t + d.sunN, 0) - 1) * 100 : null;
+    const obs = m.series.ALL.filter(d => !d.fc).slice(-30);
+    const et0 = obs.every(d => d.et0 != null) ? obs.reduce((t, d) => t + d.et0, 0) : null;
+    const hotZones = m.zones.filter(z => z.heat?.anom != null).sort((a, b) => b.heat.anom - a.heat.anom);
+    S.push({
+      key: 'heat', title: 'Chaleur et soleil', cam: 'ALL', series: 'ALL', heat: true,
+      text: [
+        heatLine(hs, true),
+        sun != null ? `Ensoleillement : ${num(sun, 1)} h par jour en moyenne${sunPct != null ? `, ${p0(sunPct)} vs normale` : ''}.` : '',
+        et0 != null ? `Bilan hydrique 30 jours : ${num(all.rain30)} mm de pluie pour ${num(et0)} mm d’évaporation potentielle, soit ${all.rain30 - et0 >= 0 ? '+' : '−'}${num(Math.abs(all.rain30 - et0))} mm.` : '',
+        hotZones.length ? `Zone la plus chaude vs normale : ${hotZones[0].name} (${signC(hotZones[0].heat.anom)}).` : '',
+      ].filter(Boolean).join(' '),
+      foot: `Les arbres souffrent quand chaleur, soleil fort et air sec se cumulent : le bilan pluie − évaporation dit si le sol se recharge ou s’assèche. Seuil de ${HOT} °C : repère agronomique courant, pas une règle du score. Chaleur et soleil ne sont pas comptés dans le score météo.`,
+    });
+  }
 
   const month = Number((w.today || new Date().toISOString()).slice(5, 7)) - 1;
   S.push({

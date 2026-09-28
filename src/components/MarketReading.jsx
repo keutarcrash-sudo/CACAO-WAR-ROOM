@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { drawStory } from '../lib/storyChart.js';
 import { useReducedMotion } from '../hooks/useReducedMotion.js';
+import { useStoryStep } from '../hooks/useStoryStep.js';
 import { money, num, pct } from '../lib/format.js';
 import { previousLevels, structure, swings, volatilityRatio } from '../../lib/engines/technical.js';
 
@@ -10,9 +11,9 @@ const LAYERS = ['price', 'structure', 'liquidity', 'ict', 'piv', 'position'];
 // Every sentence is computed from the real candles; nothing here is decorative text.
 export function MarketReading({ daily, quote, atr14, trade, position, war, analysis }) {
   const rm = useReducedMotion();
-  const [active, setActive] = useState(0);
   const canvas = useRef(null);
   const steps = useRef([]);
+  const stage = useRef(null);
   const alphas = useRef(Object.fromEntries(LAYERS.map(l => [l, l === 'price' ? 1 : 0])));
   const reveal = useRef(rm ? 1 : 0);
 
@@ -37,14 +38,7 @@ export function MarketReading({ daily, quote, atr14, trade, position, war, analy
 
   const STEPS = useMemo(() => buildSteps(model, quote, trade, position, war), [model, quote, trade, position, war]);
 
-  // which step is crossing the middle of the screen
-  useEffect(() => {
-    const io = new IntersectionObserver(es => {
-      for (const e of es) if (e.isIntersecting) setActive(Number(e.target.dataset.i));
-    }, { rootMargin: '-48% 0px -48% 0px' });
-    steps.current.forEach(el => el && io.observe(el));
-    return () => io.disconnect();
-  }, [STEPS.length]);
+  const active = Math.min(useStoryStep(stage, steps, STEPS.length), Math.max(0, STEPS.length - 1));
 
   // animate layer opacities toward the active step
   useEffect(() => {
@@ -77,7 +71,7 @@ export function MarketReading({ daily, quote, atr14, trade, position, war, analy
   if (!model) return null;
   return (
     <section className="story" aria-label="Lecture du marché">
-      <div className="story-stage">
+      <div className="story-stage" ref={stage}>
         <div className="story-head">
           <span className="eyebrow">Lecture du marché · Daily</span>
           <span className="story-count num">{String(active + 1).padStart(2, '0')} / {String(STEPS.length).padStart(2, '0')}</span>
