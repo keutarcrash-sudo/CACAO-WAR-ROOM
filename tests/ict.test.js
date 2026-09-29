@@ -140,3 +140,28 @@ describe('setup history', () => {
     expect(st.byItem[0].k).toBe('bos');
   });
 });
+
+import { weeklyContext } from '../lib/engines/weekly.js';
+describe('weekly filter', () => {
+  const daily = Array.from({ length: 40 }, (_, i) => ({ t: 1_789_000_000 + i * 86400, o: 100, h: 104, l: 96, c: 100 }));
+  const conf = { score: 12, items: [{ k: 'htf', ok: true, pts: 2, label: 'Support HTF' }] };
+  const market = { status: 'OK', quote: { price: 97 } };
+  const fundamentals = { bias: 'BULLISH', total: 6, coverage: 5 };
+  it('no high confluence against a falling weekly market off a weekly support', () => {
+    const s = evaluateSetup({ market, daily, fundamentals, conf, weekly: { contrary: true, support: null, text: 'Hebdomadaire baissier' } });
+    expect(s.status).toBe('WATCHING');
+    expect(s.reasons.map(r => r.k)).toContain('weekly');
+  });
+  it('allowed on a weekly support, or with the weekly trend', () => {
+    expect(evaluateSetup({ market, daily, fundamentals, conf, weekly: { contrary: true, support: { kind: 'swing', level: 95 }, text: '' } }).status).toBe('HIGH');
+    expect(evaluateSetup({ market, daily, fundamentals, conf, weekly: { contrary: false, aligned: true, text: '' } }).status).toBe('HIGH');
+  });
+  it('reads the weekly trend, the 52-week range and a weekly low under the price', () => {
+    const weekly = Array.from({ length: 60 }, (_, i) => ({ t: i * 604800, o: 100, h: 110 + (i % 5), l: 90 - (i % 3), c: 100 }));
+    const w = weeklyContext({ w1: { trend: 'BEARISH', swings: [{ type: 'L', price: 95 }], fvgs: [], obs: [] }, weekly, price: 100, direction: 'LONG' });
+    expect(w.contrary).toBe(true);
+    expect(w.support).toEqual({ kind: 'swing', level: 95 });
+    expect(w.range.pos).toBeGreaterThan(0.3);
+    expect(w.text).toMatch(/baissier/);
+  });
+});

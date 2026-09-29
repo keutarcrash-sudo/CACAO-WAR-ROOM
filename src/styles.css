@@ -597,3 +597,8 @@ a { color: var(--data); }
 @keyframes entryLine { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .app .view, .app .top { transition: opacity .9s var(--ease), transform 1s var(--ease), filter .9s var(--ease); }
 .pre-entry .view, .pre-entry .top { opacity: 0; transform: scale(.965); filter: blur(8px); }
+
+.weekly-line { margin: 10px 4px 0; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+.weekly-line .eyebrow { display: block; margin-bottom: 2px; }
+.weekly-line.down { color: color-mix(in oklab, var(--risk) 70%, var(--ink-2)); }
+.weekly-line.warn { color: color-mix(in oklab, var(--watch) 70%, var(--ink-2)); }

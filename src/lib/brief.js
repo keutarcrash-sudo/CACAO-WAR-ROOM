@@ -46,6 +46,7 @@ export async function buildBrief({ market, daily, atr14, fund, news, alerts, tra
     L.push(`Pivots du jour : P ${n(lv.dailyPivots.P)} · R1 ${n(lv.dailyPivots.R1)} · R2 ${n(lv.dailyPivots.R2)} · S1 ${n(lv.dailyPivots.S1)} · S2 ${n(lv.dailyPivots.S2)}.`);
   }
   L.push(`Structure simplifiée (deux derniers sommets et creux) : ${market ? await structures(market) : 'N/D'}.`);
+  if (analysis?.data?.weekly) L.push(`Contexte de fond : ${analysis.data.weekly.text}${analysis.data.weekly.contrary ? (analysis.data.weekly.support ? ' (tendance contraire au trade, mais sur un support hebdomadaire)' : ' (tendance contraire au trade : haute confluence bloquée)') : ''}.`);
   const qy = market?.quality;
   if (qy?.rebuilt) L.push(`Qualité : ${qy.rebuilt} bougie(s) Daily vide(s), incohérente(s) ou absente(s) chez Yahoo reconstruite(s) à partir des bougies 1H (marquées « 1H » ci-dessous).`);
   if (qy?.rolls?.length) L.push(`Échéances : ${qy.rolls.map(r => `passage au contrat suivant le ${day(r.t)} (écart ${r.gap > 0 ? '+' : ''}${n(r.gap)} $)`).join(' ; ')}. L’historique antérieur est décalé de cet écart pour rester continu ; ce saut n’est pas un mouvement de marché.${q.rolledToday ? ' Le changement de séance affiché exclut ce saut.' : ''}`);

@@ -79,6 +79,12 @@ export function WarRoom({ fund, analysis, market, marketState, intraday, daily, 
         { k: 'Confluence', v: war.score != null ? `${war.score} / 15` : 'N/D' },
       ]} />
 
+      {analysis.data?.weekly && (
+        <p className={`weekly-line ${analysis.data.weekly.contrary ? (analysis.data.weekly.support ? 'warn' : 'down') : analysis.data.weekly.aligned ? 'up' : ''}`}>
+          <span className="eyebrow">Contexte de fond</span> {analysis.data.weekly.text}.
+          {analysis.data.weekly.contrary ? (analysis.data.weekly.support ? ' Tendance contraire, mais prix sur un support hebdomadaire.' : ' Tendance contraire : pas de haute confluence possible ici.') : ''}
+        </p>
+      )}
       <ConfluenceCard conf={trade.product.direction === 'SHORT' ? analysis.data?.short : analysis.data?.long} onOpen={() => openSheet({ type: 'confluence' })} />
 
       <button className="glass surface-2 brief-cta tappable" onClick={() => openSheet({ type: 'brief' })}>
