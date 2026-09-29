@@ -56,3 +56,13 @@ describe('research mission', () => {
     expect(p.change).toBeCloseTo(7.65, 1);
   });
 });
+
+describe('previous value from a published change', () => {
+  it('derives it from change_pct and says so', () => {
+    const [p] = checkProposals([{ metric: 'arrivals', region: 'CI', value: 2180000, previous: null, change_pct: 9, url: 'https://www.investing.com/news/x', quote: 'shipped 2.18 MMT, up 9% from last season', published: '2026-09-28' }], Date.parse('2026-09-29'));
+    expect(p.ok).toBe(true);
+    expect(p.previous).toBe(Math.round(2180000 / 1.09));
+    expect(p.kind).toBe('press');
+    expect(p.warnings.join(' ')).toMatch(/déduite/);
+  });
+});
