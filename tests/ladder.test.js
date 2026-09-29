@@ -37,3 +37,13 @@ describe('plan B ladder', () => {
     expect(win.map(e => e.title).join()).toMatch(/Objectif de gain/);
   });
 });
+
+import { cocoaMarketOpen } from '../lib/engines/hours.js';
+describe('cocoa market hours', () => {
+  it('is open 4:45–13:30 New York time on weekdays only', () => {
+    expect(cocoaMarketOpen(new Date('2026-09-29T01:50:00Z'))).toBe(false); // 03:50 Paris
+    expect(cocoaMarketOpen(new Date('2026-09-29T09:10:00Z'))).toBe(true);  // 11:10 Paris
+    expect(cocoaMarketOpen(new Date('2026-09-29T17:40:00Z'))).toBe(false); // 19:40 Paris
+    expect(cocoaMarketOpen(new Date('2026-10-03T12:00:00Z'))).toBe(false); // Saturday
+  });
+});
