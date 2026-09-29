@@ -602,3 +602,19 @@ a { color: var(--data); }
 .weekly-line .eyebrow { display: block; margin-bottom: 2px; }
 .weekly-line.down { color: color-mix(in oklab, var(--risk) 70%, var(--ink-2)); }
 .weekly-line.warn { color: color-mix(in oklab, var(--watch) 70%, var(--ink-2)); }
+
+/* ---------- Chart: expand to full screen, landscape friendly ---------- */
+.chart-frame { position: relative; }
+.chart-expand { position: absolute; top: 4px; left: 4px; z-index: 3; width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 10px; border: 1px solid var(--hair-2); background: rgba(10, 15, 23, .7); color: var(--ink-2);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.chart-expand svg { width: 16px; height: 16px; }
+.chart-full { position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column; background: var(--bg);
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-right, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 8px) calc(env(safe-area-inset-left, 0px) + 10px); }
+.chart-full .chart-box { flex: 1; min-height: 0; }
+.chart-full-head { display: flex; align-items: center; gap: 12px; padding: 0 2px 8px; }
+.chart-full-tools { flex: 1; display: flex; justify-content: center; }
+.chart-full-tools .seg { margin: 0; }
+.chart-close { width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--hair-2); background: rgba(20, 29, 42, .8); color: var(--ink); font-size: 16px; }
+.chart-full-hint { margin: 6px 0 0; text-align: center; font-size: 12px; color: var(--ink-3); }
+@media (orientation: landscape) { .chart-full-hint { display: none; } }

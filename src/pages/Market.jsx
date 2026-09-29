@@ -82,7 +82,9 @@ export function Market({ market, daily, atr14, trade, position, analysis }) {
       <p className="tf-note">{NOTES[tf] || ''}</p>
 
       <div className="glass surface-2 chart-wrap no-swipe">
-        {candles?.length ? <Chart candles={candles} levels={levels} markers={markers} /> : (
+        {candles?.length ? <Chart candles={candles} levels={levels} markers={markers} title={`New York Cocoa · ${tf}`} toolbar={(
+          <div className="seg" role="group" aria-label="Unité de temps">{TFS.map(t => <button key={t} aria-pressed={t === tf} onClick={() => setTf(t)}>{t}</button>)}</div>
+        )} /> : (
           <div className="chart-empty">{tf !== 'D1' && other.loading ? 'Chargement…' : data?.status === 'OFFLINE' ? 'Source hors ligne. Aucune bougie disponible.' : 'Aucune donnée pour cette unité de temps.'}</div>
         )}
       </div>

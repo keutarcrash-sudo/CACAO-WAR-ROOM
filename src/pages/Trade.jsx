@@ -8,6 +8,7 @@ import { checkEntry, maxQuantity, isTurbo, turboValue, underlyingForTurboPrice }
 import { targetForGain } from '../../lib/engines/ladder.js';
 import { atr } from '../../lib/engines/technical.js';
 import { SetupHistory } from '../components/SetupHistory.jsx';
+import { Chart } from '../components/Chart.jsx';
 
 const parse = s => {
   if (s === '' || s == null) return null;
@@ -30,7 +31,7 @@ function useAction(mutate) {
   return { run, busy, error, setError };
 }
 
-export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, fx, pulse, analysis }) {
+export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, intraday, fx, pulse, analysis }) {
   const cur = trade.product.priceCurrency;
   return (
     <>
@@ -48,6 +49,8 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
         </div>
         <span className="state-chip">{position.status}</span>
       </section>
+
+      {trade.priceSource === 'NY_COCOA' && <TradeChart trade={trade} position={position} market={market} intraday={intraday} analysis={analysis?.data} />}
 
       <ul className="rows figures">
         <li><span className="row-main">Prix moyen<small>pondéré par la quantité</small></span><span className="row-side num big">{money(position.avg, cur, 1)}</span></li>
@@ -124,6 +127,33 @@ function TurboOrders({ trade, tradePrice, eurPerUnit, market, position }) {
         Estimations : cours New York différé, taux BCE du jour, sans l’écart achat/vente de l’émetteur. Le prix d’exercice monte un peu chaque jour (financement){age != null ? ` : saisi il y a ${age} jour${age > 1 ? 's' : ''}` : ''}. Si la valeur estimée s’écarte de plus de 3 % du prix BoursoBank, mets à jour le prix d’exercice.
         {position.entriesCount > 0 && position.knockedOut ? ' Ce turbo a touché sa barrière.' : ''}
       </p>
+    </section>
+  );
+}
+
+// The position on the chart: average, stop, targets, planned entries and a turbo's barrier.
+function TradeChart({ trade, position, market, intraday, analysis }) {
+  const [tf, setTf] = useState('D1');
+  const candles = (tf === '1H' ? intraday?.candles : market?.candles)?.slice(tf === '1H' ? -120 : -160);
+  const plan = trade.plan.ladder || analysis?.ladderPreview;
+  const levels = useMemo(() => {
+    const L = [];
+    if (position.avg != null) L.push({ price: position.avg, color: '#E8EBF0', title: 'moyenne', style: 0 });
+    if (trade.stop != null) L.push({ price: trade.stop, color: '#E5574F', title: 'stop' });
+    else if (analysis?.stopSuggestion?.stop != null) L.push({ price: analysis.stopSuggestion.stop, color: 'rgba(229,87,79,.55)', title: 'stop suggéré' });
+    trade.targets.forEach((t, i) => L.push({ price: t, color: '#4CC38A', title: `objectif ${i + 1}` }));
+    (plan?.levels || []).filter(x => !trade.entries.some(e => e.n === x.n)).forEach(x => L.push({ price: x.level, color: '#62C6DE', title: `E${x.n}` }));
+    if (isTurbo(trade.product)) L.push({ price: trade.product.barrier ?? trade.product.strike, color: '#E58A4A', title: 'barrière' });
+    return L;
+  }, [trade, position.avg, plan, analysis]);
+  const seg = <div className="seg" role="group" aria-label="Unité de temps">{['D1', '1H'].map(t => <button key={t} aria-pressed={t === tf} onClick={() => setTf(t)}>{t}</button>)}</div>;
+  if (!candles?.length) return null;
+  return (
+    <section>
+      <header className="section-head"><h2>Graphique</h2><div className="no-swipe">{seg}</div></header>
+      <div className="glass surface-2 chart-wrap no-swipe">
+        <Chart candles={candles} levels={levels} height={260} title={`Ta position · ${tf}`} toolbar={seg} />
+      </div>
     </section>
   );
 }
