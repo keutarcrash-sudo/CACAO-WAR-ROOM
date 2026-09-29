@@ -33,6 +33,8 @@ async function call(path, { method = 'GET', body } = {}, attempt = 0) {
   }
   let data = null;
   try { data = await res.json(); } catch { /* empty body */ }
+  // the server gave up on a slow database and reset its connections: one more try usually works
+  if (!res.ok && method === 'GET' && attempt === 0 && (res.status === 504 || data?.status === 'SLOW')) return call(path, { method, body }, 1);
   if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }

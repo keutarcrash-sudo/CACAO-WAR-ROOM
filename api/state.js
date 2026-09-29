@@ -36,4 +36,4 @@ export default guarded(async (req, res) => {
     return send(res, 200, { status: 'OK' });
   }
   throw new HttpError(400, 'Action inconnue');
-});
+}, { budgetMs: 12000 });
