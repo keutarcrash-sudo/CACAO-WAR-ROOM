@@ -201,7 +201,12 @@ function Room({ onUnauthorized, onDbMissing }) {
           </span>
         </header>
         <main className="view">
-          {!trade ? (st.error ? <p className="empty center">Impossible de charger les données : {st.error.message}</p> : null) : (
+          {!trade ? (entered ? (
+            <div className="empty center">
+              <p>{st.error ? `Impossible de charger ton plan : ${st.error.message}` : 'Ton plan met du temps à charger…'}</p>
+              <button className="btn" onClick={() => st.reload()}>Réessayer</button>
+            </div>
+          ) : null) : (
             <>
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}

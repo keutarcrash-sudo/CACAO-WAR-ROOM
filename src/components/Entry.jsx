@@ -3,6 +3,7 @@ import { RadarMark } from './Brand.jsx';
 
 const MIN = 1500;   // the sequence never flashes by
 const EXTRA = 4000; // optional modules are waited for at most this long
+const MAX = 12000;  // after this, the dashboard opens anyway and says what is missing
 
 // Entry sequence after the password: the radar scans while the real data arrives, each line
 // ticks when its source has answered, then the rings open onto the dashboard.
@@ -22,7 +23,7 @@ export function Entry({ checks, onOpen }) {
   }, [phase]);
 
   const elapsed = Date.now() - start.current;
-  const ready = required && elapsed >= MIN && (all || elapsed >= MIN + EXTRA);
+  const ready = (required && elapsed >= MIN && (all || elapsed >= MIN + EXTRA)) || elapsed >= MAX;
   useEffect(() => {
     if (!ready || phase !== 'scan') return undefined;
     const rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
