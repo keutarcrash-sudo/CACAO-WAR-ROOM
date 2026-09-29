@@ -31,7 +31,7 @@ function useAction(mutate) {
   return { run, busy, error, setError };
 }
 
-export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, intraday, fx, pulse, analysis }) {
+export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market, intraday, fx, pulse, analysis, tradeState }) {
   const cur = trade.product.priceCurrency;
   return (
     <>
@@ -50,7 +50,8 @@ export function Trade({ trade, mutate, position, tradePrice, eurPerUnit, market,
         <span className="state-chip">{position.status}</span>
       </section>
 
-      {trade.priceSource === 'NY_COCOA' && <TradeChart trade={trade} position={position} market={market} intraday={intraday} analysis={analysis?.data} />}
+      {trade.priceSource === 'NY_COCOA' && <TradeChart trade={trade} position={position} market={market} intraday={intraday} analysis={analysis?.data} priceAlerts={tradeState?.data?.priceAlerts} />}
+      <PriceAlerts state={tradeState} price={market?.quote?.price} />
 
       <ul className="rows figures">
         <li><span className="row-main">Prix moyen<small>pondéré par la quantité</small></span><span className="row-side num big">{money(position.avg, cur, 1)}</span></li>
@@ -132,7 +133,7 @@ function TurboOrders({ trade, tradePrice, eurPerUnit, market, position }) {
 }
 
 // The position on the chart: average, stop, targets, planned entries and a turbo's barrier.
-function TradeChart({ trade, position, market, intraday, analysis }) {
+function TradeChart({ trade, position, market, intraday, analysis, priceAlerts = [] }) {
   const [tf, setTf] = useState('D1');
   const candles = (tf === '1H' ? intraday?.candles : market?.candles)?.slice(tf === '1H' ? -120 : -160);
   const plan = trade.plan.ladder || analysis?.ladderPreview;
@@ -144,8 +145,9 @@ function TradeChart({ trade, position, market, intraday, analysis }) {
     trade.targets.forEach((t, i) => L.push({ price: t, color: '#4CC38A', title: `objectif ${i + 1}` }));
     (plan?.levels || []).filter(x => !trade.entries.some(e => e.n === x.n)).forEach(x => L.push({ price: x.level, color: '#62C6DE', title: `E${x.n}` }));
     if (isTurbo(trade.product)) L.push({ price: trade.product.barrier ?? trade.product.strike, color: '#E58A4A', title: 'barrière' });
+    (priceAlerts || []).filter(a => !a.triggeredAt).forEach(a => L.push({ price: a.level, color: '#D8B34C', title: 'alerte', style: 1 }));
     return L;
-  }, [trade, position.avg, plan, analysis]);
+  }, [trade, position.avg, plan, analysis, priceAlerts]);
   const seg = <div className="seg" role="group" aria-label="Unité de temps">{['D1', '1H'].map(t => <button key={t} aria-pressed={t === tf} onClick={() => setTf(t)}>{t}</button>)}</div>;
   if (!candles?.length) return null;
   return (
@@ -154,6 +156,42 @@ function TradeChart({ trade, position, market, intraday, analysis }) {
       <div className="glass surface-2 chart-wrap no-swipe">
         <Chart candles={candles} levels={levels} height={260} title={`Ta position · ${tf}`} toolbar={seg} />
       </div>
+    </section>
+  );
+}
+
+// "Tell me when cocoa touches X": a Telegram alert, even at night; nothing is bought automatically.
+function PriceAlerts({ state, price }) {
+  const [level, setLevel] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const list = state?.data?.priceAlerts || [];
+  const run = async (action, payload) => {
+    setBusy(true); setErr('');
+    try { const r = await api.priceAlert(action, payload); state.set(d => ({ ...d, priceAlerts: r.priceAlerts })); if (action === 'addPriceAlert') { setLevel(''); setNote(''); } }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <section>
+      <header className="section-head"><h2>Alertes de prix</h2><span className="meta">Telegram</span></header>
+      {list.length > 0 && (
+        <ul className="rows">
+          {list.map(a => (
+            <li key={a.id}>
+              <span className="row-main num">{num(a.level)} $ <small>{a.triggeredAt ? `atteint ${dateShort(a.triggeredAt)} ${hhmm(a.triggeredAt)}` : a.side === 'below' ? 'si le prix descend jusque-là' : 'si le prix monte jusque-là'}{a.note ? ` · ${a.note}` : ''}</small></span>
+              <button className="link faint" disabled={busy} onClick={() => run('deletePriceAlert', { id: a.id })}>Retirer</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="form-grid">
+        <Field id="pa-level" label="Niveau du cacao" value={level} onChange={setLevel} placeholder="ex. 4600" suffix="$" />
+        <Field id="pa-note" label="Note (optionnel)" value={note} onChange={setNote} placeholder="premier retest" />
+      </div>
+      {err && <p className="msg bad">{err}</p>}
+      <button className="btn block" disabled={busy || parse(level) == null} onClick={() => run('addPriceAlert', { level: parse(level), note, price })}>Ajouter l’alerte</button>
+      <p className="fine">Vérifié toutes les 5 minutes par la surveillance continue, plus haut et plus bas du jour compris. Une alerte prévient, elle n’achète rien : c’est la lecture sur le niveau qui décide.</p>
     </section>
   );
 }

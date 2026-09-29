@@ -47,3 +47,22 @@ describe('cocoa market hours', () => {
     expect(cocoaMarketOpen(new Date('2026-10-03T12:00:00Z'))).toBe(false); // Saturday
   });
 });
+
+import { addPriceAlert, reachedAlerts } from '../lib/engines/pricealerts.js';
+describe('price alerts', () => {
+  it('waits for a fall when set below the price, for a rise when set above', () => {
+    let l = addPriceAlert([], { level: 4600, price: 5600, note: 'premier retest' });
+    l = addPriceAlert(l, { level: 6200, price: 5600 });
+    expect(l.map(a => a.side)).toEqual(['below', 'above']);
+    expect(reachedAlerts(l, { price: 5000 })).toEqual([]);
+    expect(reachedAlerts(l, { price: 4590 }).map(a => a.level)).toEqual([4600]);
+    expect(reachedAlerts(l, { price: 6210 }).map(a => a.level)).toEqual([6200]);
+  });
+  it('counts a spike of the day only for an alert older than that day', () => {
+    const old = [{ id: 1, level: 4600, side: 'below', createdAt: 1000, triggeredAt: null }];
+    expect(reachedAlerts(old, { price: 4700, low: 4550, dayStart: 5000 })).toHaveLength(1);
+    const recent = [{ ...old[0], createdAt: 9000 }];
+    expect(reachedAlerts(recent, { price: 4700, low: 4550, dayStart: 5000 })).toHaveLength(0);
+    expect(reachedAlerts([{ ...old[0], triggeredAt: 1 }], { price: 4000 })).toHaveLength(0);
+  });
+});

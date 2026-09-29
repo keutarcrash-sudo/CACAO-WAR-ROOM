@@ -38,6 +38,7 @@ export const api = {
   fx: () => call('/api/fx'),
   state: () => call('/api/state'),
   ack: id => call('/api/state', { method: 'POST', body: { action: 'ack', id } }),
+  priceAlert: (action, payload) => call('/api/state', { method: 'POST', body: { action, ...payload } }),
   trade: (action, payload = {}) => call('/api/trade', { method: 'POST', body: { action, ...payload } }),
   journal: () => call('/api/journal'),
   fundamentals: () => call('/api/fundamentals'),
