@@ -23,7 +23,7 @@ afterAll(async () => { await sql?.end(); await server?.stop(); await pg?.close()
 describe('schema', () => {
   it('records the migration once', async () => {
     const v = await sql`select version from schema_version`;
-    expect(v.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(v.map(r => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

@@ -84,8 +84,13 @@ function Room({ onUnauthorized, onDbMissing }) {
 
   const market = ny.data;
   const daily = market?.candles?.length ? market.candles : null;
-  const trade = st.data?.trade ?? null;
-  const alerts = st.data?.alerts ?? [];
+  // the last plan received is kept on the phone: if the server is slow, the app still opens on it
+  const saved = useMemo(() => readSavedState(), []);
+  useEffect(() => { if (st.data) writeSavedState(st.data); }, [st.data]);
+  const stData = st.data ?? saved;
+  const fromSaved = !st.data && !!saved;
+  const trade = stData?.trade ?? null;
+  const alerts = stData?.alerts ?? [];
 
   // the snapshot of the previous visit is read once, before this visit overwrites it
   const lastVisit = useRef(undefined);
@@ -208,6 +213,12 @@ function Room({ onUnauthorized, onDbMissing }) {
             </div>
           ) : null) : (
             <>
+              {fromSaved && (
+                <div className="glass surface-2 stale-banner" role="status">
+                  <p>Plan affiché tel qu’enregistré le {new Date(saved.savedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. {st.error ? `Le serveur ne répond pas : ${st.error.message}` : 'Mise à jour en cours…'}</p>
+                  <button className="btn" onClick={() => st.reload()}>Réessayer</button>
+                </div>
+              )}
               {tab === 'warroom' && <WarRoom {...ctx} />}
               {tab === 'market' && <Market {...ctx} />}
               {tab === 'fund' && <Fundamentals fund={fund} />}
@@ -232,7 +243,7 @@ function Room({ onUnauthorized, onDbMissing }) {
       <Entry onOpen={enter} checks={[
         { k: 'Identité vérifiée', ok: true, required: true },
         { k: 'Cours New York (ICE)', ok: !!ny.data || !!ny.error, error: !ny.data && !!ny.error, required: true },
-        { k: 'Ton plan et ta position', ok: !!st.data || !!st.error, error: !st.data && !!st.error, required: true },
+        { k: 'Ton plan et ta position', ok: !!st.data || !!st.error || !!saved, error: !st.data && !!st.error, required: true },
         { k: 'Analyse technique', ok: !!analysis.data || !!analysis.error, error: !analysis.data && !!analysis.error },
         { k: 'Fondamentaux et météo', ok: !!fund.data || !!fund.error, error: !fund.data && !!fund.error },
         { k: 'News', ok: !!news.data || !!news.error, error: !news.data && !!news.error },
@@ -243,4 +254,12 @@ function Room({ onUnauthorized, onDbMissing }) {
       {tip && <div className="tip" role="tooltip" style={{ left: tip.x, top: tip.y }}><b>{tip.title}</b>{tip.text}</div>}
     </>
   );
+}
+
+const SAVED_KEY = 'cwr:state';
+function readSavedState() {
+  try { const v = JSON.parse(localStorage.getItem(SAVED_KEY) || 'null'); return v?.trade ? v : null; } catch { return null; }
+}
+function writeSavedState(d) {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify({ trade: d.trade, alerts: d.alerts, priceAlerts: d.priceAlerts, savedAt: Date.now() })); } catch { /* storage unavailable */ }
 }
