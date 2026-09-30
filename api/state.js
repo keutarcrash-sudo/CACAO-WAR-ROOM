@@ -5,12 +5,21 @@ import { addPriceAlert } from '../lib/engines/pricealerts.js';
 
 // Everything the War Room needs in one call, plus the "last visit" snapshot and alert acknowledgements.
 export default guarded(async (req, res) => {
+  req.step = 'connexion à la base';
   const sql = await db();
   if (req.method === 'GET') {
     if (query(req).get('export') === '1') {
       return send(res, 200, await repo.exportAll(sql), { headers: { 'Content-Disposition': `attachment; filename="cocoa-war-room-${new Date().toISOString().slice(0, 10)}.json"` } });
     }
-    const [trade, alerts, lastVisit, priceAlerts] = await Promise.all([repo.getActiveTrade(sql), repo.listAlerts(sql, 40), repo.getSetting(sql, 'last_visit'), repo.getSetting(sql, 'price_alerts', [])]);
+    // one after the other: if something blocks, the answer says exactly where
+    req.step = 'lecture du plan';
+    const trade = await repo.getActiveTrade(sql);
+    req.step = 'lecture des alertes';
+    const alerts = await repo.listAlerts(sql, 40);
+    req.step = 'lecture des réglages';
+    const lastVisit = await repo.getSetting(sql, 'last_visit');
+    const priceAlerts = await repo.getSetting(sql, 'price_alerts', []);
+    req.step = 'envoi';
     return send(res, 200, { status: 'OK', trade, alerts, lastVisit, priceAlerts, serverTime: Date.now() });
   }
   if (req.method !== 'POST') return send(res, 405, { status: 'ERROR' });
